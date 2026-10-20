@@ -1,0 +1,294 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Radar CS</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: painel de parede, uma coluna larga com faixa de números, lista de ação e duas tabelas lado a lado. Visual único, escuro, da marca. */
+:root{
+  --bg:#0A0A0A; --card:#141414; --line:#262626; --fg:#F4F4EE; --mut:#9A9A92;
+  --lime:#C8E000; --red:#FF5A4F; --amber:#FFB020;
+  --display:"Anton","Impact","Arial Narrow Bold",sans-serif;
+  --body:"Archivo",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.rc{min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;gap:clamp(16px,2vw,28px);
+  padding-block:clamp(16px,3vw,40px);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  background-image:radial-gradient(60rem 30rem at 90% -10%,rgba(200,224,0,.10),transparent 60%),radial-gradient(40rem 24rem at -10% 110%,rgba(200,224,0,.06),transparent 60%);
+  max-width:1600px;margin-inline:auto}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+.brand{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--lime)}
+h1{font-family:var(--display);font-weight:400;text-transform:uppercase;line-height:.9;font-size:clamp(40px,6vw,88px);margin:6px 0 0;text-wrap:balance}
+.side{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.clock{font-family:var(--display);font-size:clamp(28px,3vw,44px);color:var(--fg);font-variant-numeric:tabular-nums}
+.proto{font-family:var(--mono);font-size:12px;color:var(--mut);border:1px dashed var(--line);border-radius:6px;padding:6px 10px;max-width:28rem}
+.lead{font-size:clamp(18px,1.8vw,26px);margin:0;color:var(--mut);text-wrap:pretty}
+.lead b{color:var(--fg)} .lead b.hot{color:var(--red)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:clamp(12px,1.5vw,20px)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:clamp(14px,1.6vw,24px);min-width:0}
+.tile{display:flex;flex-direction:column;gap:6px}
+.lbl{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.num{font-family:var(--display);font-size:clamp(56px,7vw,112px);line-height:.95;font-variant-numeric:tabular-nums;color:var(--lime);text-shadow:0 0 28px rgba(200,224,0,.3)}
+.num.bad{color:var(--red);text-shadow:0 0 28px rgba(255,90,79,.35)}
+.rule{font-size:13px;color:var(--mut)}
+h2{font-family:var(--display);font-weight:400;text-transform:uppercase;font-size:clamp(24px,2.4vw,36px);margin:0;line-height:1}
+.note{font-size:13px;color:var(--mut);margin:6px 0 14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,28rem),1fr));gap:clamp(12px,1.5vw,20px)}
+.tw{overflow-x:auto;max-height:36rem;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:clamp(15px,1.2vw,19px);font-variant-numeric:tabular-nums}
+th{text-align:left;font-family:var(--mono);font-weight:500;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:8px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);white-space:nowrap}
+td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+td.n,th.n{text-align:right}
+td.hot{color:var(--red);font-weight:700} td.zero{color:var(--mut)}
+tr.g td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+tr.e td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
+.pill{display:inline-block;font-family:var(--mono);font-size:12px;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:3px 10px;border:1px solid currentColor;white-space:nowrap}
+.pill.g{color:var(--red)} .pill.e{color:var(--amber)} .pill.ok{color:var(--lime)} .pill.m{color:var(--mut)}
+.sub{display:block;font-size:13px;color:var(--amber);margin-top:4px}
+.act{white-space:nowrap;text-align:right}
+button{font:inherit;cursor:pointer}
+.tick{font-family:var(--mono);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--lime);background:transparent;border:1px solid var(--lime);border-radius:8px;padding:8px 12px}
+.tick:hover{background:rgba(200,224,0,.12)}
+.tick:focus-visible,.chip:focus-visible,.link:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
+.how{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.chip{font-family:var(--mono);font-size:12px;color:var(--fg);background:#1E1E1E;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.chip:hover{border-color:var(--lime);color:var(--lime)}
+.link{background:none;border:0;color:var(--mut);font-family:var(--mono);font-size:12px;text-decoration:underline;padding:8px 4px}
+.empty{color:var(--lime);font-family:var(--display);text-transform:uppercase;font-size:clamp(22px,2vw,32px);padding:24px 10px}
+.muted{color:var(--mut);padding:18px 10px;font-size:14px}
+.rules{display:flex;flex-wrap:wrap;gap:8px 28px;font-family:var(--mono);font-size:12px;color:var(--mut)}
+.rules b{color:var(--fg);font-weight:500} .rules i{font-style:normal;color:var(--red)} .rules em{font-style:normal;color:var(--amber)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--lime);color:#0A0A0A;font-weight:700;border-radius:10px;padding:10px 16px;z-index:20}
+@media (prefers-reduced-motion:no-preference){.flash{animation:fl .8s ease-out}@keyframes fl{from{background:rgba(200,224,0,.18)}to{background:transparent}}}
+</style>
+
+<div class="rc">
+  <div class="top">
+    <div>
+      <div class="brand">Grupo Silva · CS</div>
+      <h1>Radar CS</h1>
+    </div>
+    <div class="side">
+      <span class="clock" id="clock">--:--</span>
+      <span class="proto">Protótipo com clientes fictícios. Quando o número observador estiver ligado, a resposta no grupo tira o alerta sozinha.</span>
+    </div>
+  </div>
+  <p class="lead" id="lead">Carregando o radar…</p>
+
+  <section class="tiles" id="resumo">
+    <div class="card tile"><span class="lbl">Clientes em alerta</span><span class="num" id="k-alertas">–</span><span class="rule" id="k-total">&nbsp;</span></div>
+    <div class="card tile"><span class="lbl">Sem contato</span><span class="num" id="k-contato">–</span><span class="rule">2 dias ou mais</span></div>
+    <div class="card tile"><span class="lbl">Sem resposta</span><span class="num" id="k-resposta">–</span><span class="rule">31 minutos ou mais</span></div>
+    <div class="card tile"><span class="lbl">Retornos vencidos</span><span class="num" id="k-retornos">–</span><span class="rule">prometido e não dado</span></div>
+  </section>
+
+  <section class="card" id="agir">
+    <h2>Agir agora</h2>
+    <p class="note">Respondeu no grupo, o alerta sai sozinho. Resolveu por ligação, privado ou reunião, marque aqui.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Cliente</th><th>Quem resolve</th><th>O que aconteceu</th><th class="act"></th></tr></thead>
+      <tbody id="t-alertas"><tr><td colspan="4" class="muted">Os alertas aparecem aqui assim que o radar carregar.</td></tr></tbody></table></div>
+  </section>
+
+  <section class="card" id="manual">
+    <h2>Resolvidos por fora</h2>
+    <p class="note">Marcados à mão nas últimas 3 horas. Se não aparecer registro no grupo em 3 horas, o alerta volta em vermelho.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Cliente</th><th>Marcado por</th><th>Como</th><th>Quando</th><th class="act"></th></tr></thead>
+      <tbody id="t-manual"><tr><td colspan="5" class="muted">Nada marcado à mão ainda.</td></tr></tbody></table></div>
+  </section>
+
+  <div class="grid">
+    <section class="card" id="time">
+      <h2>Por especialista</h2>
+      <p class="note">Quantos clientes de cada um estão fora do prazo agora.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Especialista</th><th class="n">Clientes</th><th class="n">Sem contato</th><th class="n">Sem resposta</th><th class="n">Retornos vencidos</th></tr></thead>
+        <tbody id="t-time"></tbody></table></div>
+    </section>
+    <section class="card" id="retornos">
+      <h2>Retornos prometidos</h2>
+      <p class="note">Todo "vou ver e te retorno", com o prazo.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Cliente</th><th>Promessa</th><th>Prazo</th><th>Situação</th></tr></thead>
+        <tbody id="t-ret"></tbody></table></div>
+    </section>
+  </div>
+
+  <div class="rules" id="regras">
+    <span><b>Sem resposta:</b> <em>20 min aviso ao especialista</em> · <i>31 min gestor</i></span>
+    <span><b>Sem contato:</b> <em>1 dia aviso ao especialista</em> · <i>2 dias gestor</i></span>
+    <span><b>Retorno vencido:</b> <i>direto pro gestor</i></span>
+    <span><b>Marcado à mão:</b> <i>volta em 3h sem registro no grupo</i></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const H24 = 3 * 3600 * 1000;
+  const COMO = ['Ligação', 'Privado', 'Reunião'];
+  const state = { clientes: [], promessas: [], resolvidos: {}, ready: { c: false, p: false, r: false }, open: null, names: {}, me: null };
+  let db = null, user = null;
+
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const td = (tr, text, cls) => { const c = el('td', cls, text); tr.appendChild(c); return c; };
+  const pill = (text, kind) => el('span', 'pill ' + kind, text);
+  const hhmm = (d) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const toast = (msg) => { const t = el('div', 'toast', msg); document.body.appendChild(t); setTimeout(() => t.remove(), 2600); };
+
+  function tickClock() { $('clock').textContent = hhmm(new Date()); }
+  tickClock(); setInterval(() => { tickClock(); render(); }, 60000);
+
+  function tickAtivo(id) {
+    const r = state.resolvidos[id];
+    if (!r || !r.em) return null;
+    const idade = Date.now() - new Date(r.em).getTime();
+    return { ...r, vencido: idade >= H24, idade };
+  }
+
+  function calcular() {
+    const alertas = [], manuais = [];
+    for (const c of state.clientes) {
+      const m = Number(c.sem_resposta_min) || 0, d = Number(c.dias_sem_contato) || 0;
+      const motivos = []; let nivel = 0, peso = 0;
+      if (m >= 20) { motivos.push('Mensagem sem resposta há ' + m + ' min'); nivel = Math.max(nivel, m >= 31 ? 2 : 1); peso += m / 30; }
+      if (d >= 1) { motivos.push('Sem contato há ' + d + (d === 1 ? ' dia' : ' dias')); nivel = Math.max(nivel, d >= 2 ? 2 : 1); peso += d; }
+      for (const p of state.promessas) {
+        const h = Number(p.horas_para_vencer);
+        if (p.cliente === c.cliente && h < 0) { motivos.push('Retorno vencido há ' + (-h) + 'h: ' + String(p.promessa).toLowerCase()); nivel = 2; peso += -h / 6; }
+      }
+      if (!nivel) continue;
+      const t = tickAtivo(c.id);
+      if (t && !t.vencido) { manuais.push({ c, t, motivo: motivos.join('. ') }); continue; }
+      alertas.push({ c, motivo: motivos.join('. '), nivel: t ? 2 : nivel, peso: peso + (t ? 100 : 0), voltou: t });
+    }
+    alertas.sort((a, b) => b.nivel - a.nivel || b.peso - a.peso);
+    manuais.sort((a, b) => a.t.idade - b.t.idade);
+    return { alertas, manuais };
+  }
+
+  async function resolveNames(ids) {
+    const falta = ids.filter((id) => id && !(id in state.names));
+    if (!falta.length || !user) return;
+    try { const ps = await user.profiles(falta); for (const id of falta) state.names[id] = (ps[id] && ps[id].name) || 'Alguém do time'; render(); } catch (e) { /* nomes ficam genéricos */ }
+  }
+
+  async function marcar(c, como) {
+    if (!db) return;
+    try {
+      const por = user ? await user.id() : null;
+      await db.collection('resolvidos').doc(c.id).set({ cliente: c.cliente, especialista: c.especialista, como, por, em: new Date().toISOString() });
+      state.open = null; toast(c.cliente + ': marcado como resolvido por ' + como.toLowerCase());
+    } catch (e) { toast('Não deu para marcar. Você precisa ter acesso de edição ao painel.'); }
+  }
+  async function desfazer(id) {
+    if (!db) return;
+    try { await db.collection('resolvidos').doc(id).delete(); toast('Marcação desfeita. O alerta voltou.'); }
+    catch (e) { toast('Não deu para desfazer. Você precisa ter acesso de edição ao painel.'); }
+  }
+
+  function render() {
+    const ready = state.ready.c && state.ready.p && state.ready.r;
+    if (!ready) return;
+    const { alertas, manuais } = calcular();
+    const total = state.clientes.length;
+    const gestor = alertas.filter((a) => a.nivel === 2).length;
+    const semContato = state.clientes.filter((c) => Number(c.dias_sem_contato) >= 2 && !(tickAtivo(c.id) && !tickAtivo(c.id).vencido)).length;
+    const semResposta = state.clientes.filter((c) => Number(c.sem_resposta_min) >= 31 && !(tickAtivo(c.id) && !tickAtivo(c.id).vencido)).length;
+    const retVencidos = state.promessas.filter((p) => Number(p.horas_para_vencer) < 0).length;
+
+    const setNum = (id, v) => { const e = $(id); e.textContent = String(v); e.classList.toggle('bad', v > 0); };
+    setNum('k-alertas', alertas.length); setNum('k-contato', semContato); setNum('k-resposta', semResposta); setNum('k-retornos', retVencidos);
+    $('k-total').textContent = 'de ' + total + ' na carteira';
+
+    const lead = $('lead'); lead.textContent = '';
+    if (!total) lead.textContent = 'Nenhum cliente cadastrado ainda. Quando o sistema estiver ligado, a carteira aparece aqui.';
+    else if (!alertas.length) lead.append(el('b', null, 'Tudo em dia.'), ' Nenhum cliente precisa de ação agora.');
+    else lead.append(el('b', null, String(alertas.length)), ' clientes precisam de ação agora. ', el('b', 'hot', String(gestor)), ' já subiram para o gestor.');
+
+    // Agir agora
+    const ta = $('t-alertas'); ta.textContent = '';
+    if (!alertas.length) { const tr = el('tr'); const c = el('td', 'empty', 'Tudo em dia. Nenhum cliente em alerta.'); c.colSpan = 4; tr.appendChild(c); ta.appendChild(tr); }
+    for (const a of alertas) {
+      const tr = el('tr', a.nivel === 2 ? 'g' : 'e');
+      td(tr, a.c.cliente);
+      const q = el('td'); q.appendChild(pill(a.c.especialista, a.nivel === 2 ? 'g' : 'e')); tr.appendChild(q);
+      const mo = td(tr, a.motivo);
+      if (a.voltou) mo.appendChild(el('span', 'sub', 'Marcado à mão há ' + Math.floor(a.voltou.idade / 3600000) + 'h por ' + (a.voltou.como || '').toLowerCase() + ', sem registro no grupo.'));
+      const ac = el('td', 'act');
+      if (state.open === a.c.id) {
+        const how = el('div', 'how');
+        for (const k of COMO) { const b = el('button', 'chip', k); b.type = 'button'; b.addEventListener('click', () => marcar(a.c, k)); how.appendChild(b); }
+        const x = el('button', 'link', 'Cancelar'); x.type = 'button'; x.addEventListener('click', () => { state.open = null; render(); }); how.appendChild(x);
+        ac.appendChild(how);
+      } else if (db) {
+        const b = el('button', 'tick', '✓ Resolvi por fora'); b.type = 'button';
+        b.addEventListener('click', () => { state.open = a.c.id; render(); });
+        ac.appendChild(b);
+      }
+      tr.appendChild(ac); ta.appendChild(tr);
+    }
+
+    // Resolvidos por fora
+    const tm = $('t-manual'); tm.textContent = '';
+    if (!manuais.length) { const tr = el('tr'); const c = el('td', 'muted', 'Nada marcado à mão nas últimas 3 horas.'); c.colSpan = 5; tr.appendChild(c); tm.appendChild(tr); }
+    resolveNames(manuais.map((m) => m.t.por));
+    for (const m of manuais) {
+      const tr = el('tr');
+      td(tr, m.c.cliente);
+      td(tr, m.t.por ? (state.names[m.t.por] || '…') : 'Alguém do time');
+      const c3 = el('td'); c3.appendChild(pill(m.t.como || 'Por fora', 'm')); tr.appendChild(c3);
+      const quando = new Date(m.t.em);
+      td(tr, hhmm(quando) + ' · volta às ' + hhmm(new Date(quando.getTime() + H24)) + ' se não houver registro');
+      const ac = el('td', 'act');
+      if (db) { const u = el('button', 'link', 'Desfazer'); u.type = 'button'; u.addEventListener('click', () => desfazer(m.c.id)); ac.appendChild(u); }
+      tr.appendChild(ac); tm.appendChild(tr);
+    }
+
+    // Por especialista
+    const tt = $('t-time'); tt.textContent = '';
+    const nomes = [...new Set(state.clientes.map((c) => c.especialista))].sort();
+    const ativoSemTick = (c) => { const t = tickAtivo(c.id); return !(t && !t.vencido); };
+    for (const e of nomes) {
+      const cs = state.clientes.filter((c) => c.especialista === e);
+      const vals = [
+        cs.filter((c) => Number(c.dias_sem_contato) >= 2 && ativoSemTick(c)).length,
+        cs.filter((c) => Number(c.sem_resposta_min) >= 31 && ativoSemTick(c)).length,
+        state.promessas.filter((p) => p.especialista === e && Number(p.horas_para_vencer) < 0).length
+      ];
+      const tr = el('tr'); td(tr, e); td(tr, String(cs.length), 'n');
+      for (const v of vals) td(tr, String(v), 'n ' + (v > 0 ? 'hot' : 'zero'));
+      tt.appendChild(tr);
+    }
+
+    // Retornos
+    const tp = $('t-ret'); tp.textContent = '';
+    const rs = state.promessas.slice().sort((a, b) => Number(a.horas_para_vencer) - Number(b.horas_para_vencer));
+    if (!rs.length) { const tr = el('tr'); const c = el('td', 'muted', 'Nenhum retorno prometido em aberto.'); c.colSpan = 4; tr.appendChild(c); tp.appendChild(tr); }
+    for (const p of rs) {
+      const h = Number(p.horas_para_vencer);
+      const tr = el('tr'); td(tr, p.cliente); td(tr, p.promessa);
+      td(tr, h < 0 ? 'Venceu há ' + (-h) + 'h' : 'Vence em ' + h + 'h', h < 0 ? 'hot' : '');
+      const sit = h < 0 ? ['Vencido', 'g'] : (h <= 6 ? ['Vence hoje', 'e'] : ['No prazo', 'ok']);
+      const c4 = el('td'); c4.appendChild(pill(sit[0], sit[1])); tr.appendChild(c4); tp.appendChild(tr);
+    }
+  }
+
+  (async function boot() {
+    [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
+    if (!db) { $('lead').textContent = 'Abra o painel logado na conta do Grupo Silva para ver o radar.'; return; }
+    const listen = (path, key, apply) => db.collection(path).onSnapshot((snap) => { apply(snap.docs); state.ready[key] = true; render(); },
+      () => { state.ready[key] = true; render(); });
+    listen('clientes', 'c', (docs) => { state.clientes = docs.map((d) => ({ id: d.id, ...d.data() })); });
+    listen('promessas', 'p', (docs) => { state.promessas = docs.map((d) => ({ id: d.id, ...d.data() })); });
+    listen('resolvidos', 'r', (docs) => { const o = {}; for (const d of docs) o[d.id] = d.data(); state.resolvidos = o; });
+  })();
+})();
+</script>
+
+</body></html>

@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Radar CS</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: painel de parede em uma coluna larga. Faixa de quatro números, "Agir agora" com o tempo decorrido como destaque de cada linha, resolvidos por fora, e a carteira por especialista ao lado dos retornos prometidos. Identidade do Grupo Silva: preto, verde-limão, Anton, Archivo e IBM Plex Mono. Visual único e escuro, por escolha da marca. */
+:root{
+  --bg:#0A0A0A; --card:#141414; --card2:#1B1B1A; --line:#262626; --fg:#F4F4EE; --mut:#9A9A92;
+  --lime:#C8E000; --red:#FF5A4F; --amber:#FFB020;
+  --display:"Anton","Impact","Arial Narrow Bold",sans-serif;
+  --body:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html{font-size:16px}
+html.tv{font-size:clamp(18px,1.5vw,30px)}
+body{background-color:var(--bg);background-image:radial-gradient(60rem 30rem at 90% -10%,rgba(200,224,0,.10),transparent 60%),radial-gradient(40rem 24rem at -10% 110%,rgba(200,224,0,.06),transparent 60%);background-attachment:fixed;color:var(--fg);font-family:var(--body);font-size:1rem;line-height:1.4}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.rc{box-sizing:border-box;display:flex;flex-direction:column;gap:clamp(1rem,2vw,1.75rem);padding-block:clamp(1rem,3vw,2.5rem);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1600px;margin-inline:auto}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:1rem}
+.brand{font-family:var(--mono);font-size:.75rem;letter-spacing:.14em;text-transform:uppercase;color:var(--lime)}
+h1{font-family:var(--display);font-weight:400;text-transform:uppercase;line-height:.9;font-size:clamp(2.5rem,6vw,5.5rem);margin:.4rem 0 0;text-wrap:balance}
+.side{display:flex;flex-direction:column;align-items:flex-end;gap:.5rem;min-width:0}
+.clock{font-family:var(--display);font-size:clamp(1.75rem,3vw,2.75rem);line-height:1;font-variant-numeric:tabular-nums}
+.obs{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.75rem;letter-spacing:.03em;color:var(--mut);text-align:right}
+.obs .dot{width:.55rem;height:.55rem;border-radius:50%;background:var(--lime);flex:none}
+.obs.off .dot{background:var(--red)} .obs.wait .dot{background:var(--amber)}
+@media (prefers-reduced-motion:no-preference){.obs.on .dot{animation:pulse 2s ease-in-out infinite}@keyframes pulse{50%{opacity:.3}}}
+button{font:inherit;cursor:pointer}
+.tvbtn{font-family:var(--mono);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);background:transparent;border:1px solid var(--line);border-radius:.5rem;padding:.45rem .7rem}
+.tvbtn:hover{color:var(--lime);border-color:var(--lime)}
+.tvbtn:focus-visible,.tick:focus-visible,.chip:focus-visible,.link:focus-visible,.ctl:focus-visible,.who select:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
+
+.demo{border:1px dashed var(--line);border-radius:.5rem;padding:.75rem .875rem;display:flex;flex-direction:column;gap:.625rem;background:rgba(244,244,238,.02)}
+.demo-tag{font-family:var(--mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--lime)}
+.ctls{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+.ctl{font-family:var(--mono);font-size:.75rem;color:var(--fg);background:#1E1E1E;border:1px solid var(--line);border-radius:.5rem;padding:.5rem .65rem}
+.ctl:hover{border-color:var(--lime);color:var(--lime)}
+.who{font-family:var(--mono);font-size:.75rem;color:var(--mut);display:inline-flex;gap:.5rem;align-items:center}
+.who select{font:inherit;color:var(--fg);background:#1E1E1E;border:1px solid var(--line);border-radius:.5rem;padding:.4rem .5rem}
+.demo-note{margin:0;font-family:var(--mono);font-size:.75rem;color:var(--mut)}
+
+.offline{border:1px solid var(--red);border-radius:.75rem;background:rgba(255,90,79,.10);padding:1rem 1.25rem}
+.offline h2{color:var(--red);font-size:clamp(1.25rem,2vw,1.75rem)}
+.offline p{margin:.4rem 0 0;color:var(--fg)}
+
+.lead{font-size:clamp(1.125rem,1.8vw,1.625rem);margin:0;color:var(--mut);text-wrap:pretty}
+.lead b{color:var(--fg)} .lead b.hot{color:var(--red)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:clamp(.75rem,1.5vw,1.25rem)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:.75rem;padding:clamp(.875rem,1.6vw,1.5rem);min-width:0}
+.tile{display:flex;flex-direction:column;gap:.375rem}
+.lbl{font-family:var(--mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.num{font-family:var(--display);font-size:clamp(3.5rem,7vw,7rem);line-height:.95;font-variant-numeric:tabular-nums;color:var(--lime);text-shadow:0 0 28px rgba(200,224,0,.3)}
+.num.bad{color:var(--red);text-shadow:0 0 28px rgba(255,90,79,.35)}
+.rule{font-size:.8125rem;color:var(--mut);display:flex;flex-wrap:wrap;gap:.25rem .625rem;align-items:center}
+.aw{font-family:var(--mono);font-size:.6875rem;letter-spacing:.04em;text-transform:uppercase;color:var(--amber);border:1px solid currentColor;border-radius:999px;padding:.1rem .5rem;white-space:nowrap}
+.stale .num{opacity:.45}
+h2{font-family:var(--display);font-weight:400;text-transform:uppercase;font-size:clamp(1.5rem,2.4vw,2.25rem);margin:0;line-height:1}
+.note{font-size:.8125rem;color:var(--mut);margin:.375rem 0 .875rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,28rem),1fr));gap:clamp(.75rem,1.5vw,1.25rem)}
+
+.alerts{display:flex;flex-direction:column}
+.row{display:grid;grid-template-columns:minmax(7.5rem,9.5rem) minmax(0,1fr) minmax(9rem,13rem) auto;gap:.5rem 1.25rem;align-items:start;padding:1rem .25rem;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.badge{display:flex;flex-direction:column;gap:.2rem;min-width:0}
+.badge .big{font-family:var(--display);font-size:clamp(1.9rem,3.2vw,3rem);line-height:.95;font-variant-numeric:tabular-nums;white-space:nowrap}
+.row.g .big{color:var(--red)} .row.e .big{color:var(--amber)}
+.badge .lab{font-family:var(--mono);font-size:.6875rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.main{min-width:0;display:flex;flex-direction:column;gap:.375rem}
+.cli{font-weight:700;font-size:1.125rem}
+.mot{font-size:.9375rem;font-variant-numeric:tabular-nums}
+.mt{max-width:22rem}
+.meter{position:relative;height:.3rem;border-radius:999px;background:var(--line);margin-top:.4rem}
+.meter i{position:absolute;inset:0 auto 0 0;border-radius:inherit;background:var(--amber)}
+.meter b{position:absolute;top:-.2rem;bottom:-.2rem;width:2px;background:var(--fg);opacity:.55}
+.up{font-family:var(--mono);font-size:.75rem;color:var(--amber);margin-top:.35rem}
+.sub{display:block;font-size:.8125rem;color:var(--amber)}
+.owner{display:flex;flex-direction:column;gap:.35rem;align-items:flex-start;min-width:0}
+.owner small{font-family:var(--mono);font-size:.6875rem;color:var(--mut)}
+.pill{display:inline-block;font-family:var(--mono);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:.2rem .65rem;border:1px solid currentColor;white-space:nowrap}
+.pill.g{color:var(--red)} .pill.e{color:var(--amber)} .pill.ok{color:var(--lime)} .pill.m{color:var(--mut)}
+.act{display:flex;justify-content:flex-end;min-width:0}
+.tick{font-family:var(--mono);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;color:var(--lime);background:transparent;border:1px solid var(--lime);border-radius:.5rem;padding:.5rem .75rem;white-space:nowrap}
+.tick:hover{background:rgba(200,224,0,.12)}
+.how{display:flex;flex-wrap:wrap;gap:.375rem;justify-content:flex-end}
+.chip{font-family:var(--mono);font-size:.75rem;color:var(--fg);background:#1E1E1E;border:1px solid var(--line);border-radius:.5rem;padding:.5rem .625rem}
+.chip:hover{border-color:var(--lime);color:var(--lime)}
+.link{background:none;border:0;color:var(--mut);font-family:var(--mono);font-size:.75rem;text-decoration:underline;padding:.5rem .25rem}
+.empty{color:var(--lime);font-family:var(--display);text-transform:uppercase;font-size:clamp(1.375rem,2vw,2rem);padding:1.5rem .25rem}
+.muted{color:var(--mut);padding:1.125rem .625rem;font-size:.875rem}
+
+.tw{overflow-x:auto;max-height:36rem;overflow-y:auto}
+.tw table{min-width:32rem}
+table{width:100%;border-collapse:collapse;font-size:clamp(.9375rem,1.2vw,1.1875rem);font-variant-numeric:tabular-nums}
+th{text-align:left;font-family:var(--mono);font-weight:500;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:.5rem .625rem;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);white-space:nowrap}
+td{padding:.75rem .625rem;border-bottom:1px solid var(--line);vertical-align:top}
+td.n,th.n{text-align:right}
+td.hot{color:var(--red);font-weight:700} td.zero{color:var(--mut)}
+td small{display:block;font-family:var(--mono);font-size:.6875rem;color:var(--mut);margin-top:.15rem}
+tr.done td{opacity:.55}
+.dots{display:flex;flex-wrap:wrap;gap:3px;margin-top:.5rem;max-width:16rem}
+.dots i{width:.7rem;height:.7rem;border-radius:2px;background:rgba(200,224,0,.35)}
+.dots i.d-e{background:var(--amber)} .dots i.d-g{background:var(--red)} .dots i.d-r{background:transparent;box-shadow:inset 0 0 0 1.5px var(--mut)}
+.legend{display:flex;flex-wrap:wrap;gap:.25rem .875rem;font-family:var(--mono);font-size:.6875rem;color:var(--mut);margin:0 0 .75rem}
+.legend span{display:inline-flex;align-items:center;gap:.35rem}
+.legend i{width:.6rem;height:.6rem;border-radius:2px;display:inline-block;background:rgba(200,224,0,.35)}
+.legend i.d-e{background:var(--amber)} .legend i.d-g{background:var(--red)} .legend i.d-r{background:transparent;box-shadow:inset 0 0 0 1.5px var(--mut)}
+
+.rules{display:flex;flex-wrap:wrap;gap:.5rem 1.75rem;font-family:var(--mono);font-size:.75rem;color:var(--mut)}
+.rules b{color:var(--fg);font-weight:500} .rules i{font-style:normal;color:var(--red)} .rules em{font-style:normal;color:var(--amber)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1.25rem + env(safe-area-inset-bottom,0px));max-width:min(32rem,calc(100vw - 2rem));background:var(--lime);color:#0A0A0A;font-weight:700;border-radius:.625rem;padding:.625rem 1rem;z-index:20;text-align:center}
+@media (prefers-reduced-motion:no-preference){.flash{animation:fl 1.2s ease-out}@keyframes fl{from{background:rgba(200,224,0,.2)}to{background:transparent}}}
+
+html.tv .admin,html.tv .demo{display:none}
+html.tv .tvbtn{opacity:.5}
+
+@media (max-width:760px){
+  .row{grid-template-columns:auto minmax(0,1fr);gap:.5rem .875rem}
+  .owner{grid-column:2}
+  .act{grid-column:1/-1;justify-content:flex-start}
+  .how{justify-content:flex-start}
+  .side{align-items:flex-start}
+  .obs{text-align:left}
+}
+</style>
+
+<div class="rc">
+  <header class="top">
+    <div>
+      <div class="brand">Grupo Silva · CS</div>
+      <h1>Radar CS</h1>
+    </div>
+    <div class="side">
+      <span class="clock" id="clock">--:--</span>
+      <span class="obs" id="obs"><span class="dot"></span><span id="obs-txt">Verificando observador…</span></span>
+      <button class="tvbtn" id="tvbtn" type="button" aria-pressed="false">Modo TV</button>
+    </div>
+  </header>
+
+  <div class="demo" id="demo">
+    <span class="demo-tag">Demonstração · clientes fictícios</span>
+    <div class="ctls">
+      <button class="ctl" type="button" data-act="avancar15">Avançar 15 min</button>
+      <button class="ctl" type="button" data-act="avancar60">Avançar 1 h</button>
+      <button class="ctl" type="button" data-act="time">Time responde no 1º alerta</button>
+      <button class="ctl" type="button" data-act="cliente">Cliente escreve num grupo</button>
+      <button class="ctl" type="button" data-act="obs" id="ctl-obs">Derrubar observador</button>
+      <button class="ctl" type="button" data-act="reset">Reiniciar</button>
+      <label class="who" for="voce">Marcar como <select id="voce"></select></label>
+    </div>
+    <p class="demo-note">O tempo é simulado e nada aqui fala com o WhatsApp. Quando o número observador estiver ligado, a resposta do time no grupo tira o alerta sozinha.</p>
+  </div>
+
+  <div class="offline" id="offline" hidden role="alert">
+    <h2 id="off-t"></h2>
+    <p id="off-p"></p>
+  </div>
+
+  <p class="lead" id="lead" aria-live="polite">Carregando o radar…</p>
+
+  <section class="tiles" id="resumo" aria-label="Resumo">
+    <div class="card tile"><span class="lbl">Clientes em alerta</span><span class="num" id="k-alertas">–</span><span class="rule" id="k-total">&nbsp;</span></div>
+    <div class="card tile"><span class="lbl">Sem contato</span><span class="num" id="k-contato">–</span><span class="rule">2 dias ou mais<span class="aw" id="a-contato" hidden></span></span></div>
+    <div class="card tile"><span class="lbl">Sem resposta</span><span class="num" id="k-resposta">–</span><span class="rule">31 minutos ou mais<span class="aw" id="a-resposta" hidden></span></span></div>
+    <div class="card tile"><span class="lbl">Retornos vencidos</span><span class="num" id="k-retornos">–</span><span class="rule">prometido e não dado</span></div>
+  </section>
+
+  <section class="card" id="agir">
+    <h2>Agir agora</h2>
+    <p class="note">Respondeu no grupo, o alerta sai sozinho. Resolveu por ligação, privado ou reunião, marque aqui.</p>
+    <div class="alerts" id="alertas" role="list"></div>
+  </section>
+
+  <section class="card" id="manual">
+    <h2>Resolvidos por fora</h2>
+    <p class="note">Marcados à mão nas últimas 3 horas. Se não aparecer registro no grupo em 3 horas, o alerta volta em vermelho.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Cliente</th><th>Marcado por</th><th>Como</th><th>Quando</th><th class="admin"></th></tr></thead>
+      <tbody id="t-manual"></tbody></table></div>
+  </section>
+
+  <div class="grid">
+    <section class="card" id="time">
+      <h2>Por especialista</h2>
+      <p class="note">Quantos clientes de cada um estão fora do prazo agora. Cada quadrado é um cliente.</p>
+      <p class="legend"><span><i></i>em dia</span><span><i class="d-e"></i>aviso</span><span><i class="d-g"></i>gestor</span><span><i class="d-r"></i>resolvido por fora</span></p>
+      <div class="tw"><table>
+        <thead><tr><th>Especialista</th><th class="n">Clientes</th><th class="n">Sem contato</th><th class="n">Sem resposta</th><th class="n">Retornos vencidos</th></tr></thead>
+        <tbody id="t-time"></tbody></table></div>
+    </section>
+    <section class="card" id="retornos">
+      <h2>Retornos prometidos</h2>
+      <p class="note">Todo "vou ver e te retorno", com o prazo.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Cliente</th><th>Promessa</th><th>Prazo</th><th>Situação</th></tr></thead>
+        <tbody id="t-ret"></tbody></table></div>
+    </section>
+  </div>
+
+  <div class="rules" id="regras">
+    <span><b>Sem resposta:</b> <em>20 min aviso ao especialista</em> · <i>31 min gestor</i></span>
+    <span><b>Sem contato:</b> <em>1 dia aviso ao especialista</em> · <i>2 dias gestor</i></span>
+    <span><b>Retorno vencido:</b> <i>direto pro gestor</i></span>
+    <span><b>Marcado à mão:</b> <i>volta em 3h sem registro no grupo</i></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const MIN = 60000, H = 3600000, D = 86400000;
+  const CFG = Object.assign({ modo: 'demo', apiBase: '/api', pollMs: 60000 }, window.RADAR_CONFIG || {});
+  const IS_DEMO = CFG.modo !== 'api';
+  const COMO = [['ligacao', 'Ligação'], ['privado', 'Privado'], ['reuniao', 'Reunião']];
+  const COMO_TXT = { ligacao: 'ligação', privado: 'privado', reuniao: 'reunião' };
+  const TIPO_TXT = { sem_resposta: 'Sem resposta', sem_contato: 'Sem contato', retorno_vencido: 'Retorno vencido' };
+  const TZ = 'America/Sao_Paulo';
+
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const td = (tr, text, cls) => { const c = el('td', cls, text); tr.appendChild(c); return c; };
+  const pill = (text, kind) => el('span', 'pill ' + kind, text);
+  const hhmm = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: TZ });
+  const ddmm = (ms) => new Date(ms).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: TZ });
+  const ts = (s) => Date.parse(s);
+  const iso = (ms) => new Date(ms).toISOString();
+  const lowerFirst = (s) => String(s || '').charAt(0).toLowerCase() + String(s || '').slice(1);
+
+  function dur(ms) {
+    const m = Math.floor(Math.max(0, ms) / MIN);
+    if (m < 60) return m + ' min';
+    const h = Math.floor(m / 60);
+    if (h < 24) { const r = m % 60; return r ? h + 'h' + String(r).padStart(2, '0') : h + 'h'; }
+    const d = Math.floor(h / 24), rh = h % 24;
+    return d + (d === 1 ? ' dia' : ' dias') + (rh ? ' e ' + rh + 'h' : '');
+  }
+  function big(ms) {
+    const m = Math.floor(Math.max(0, ms) / MIN);
+    if (m < 60) return m + ' MIN';
+    const h = Math.floor(m / 60);
+    if (h < 24) { const r = m % 60; return r ? h + 'H' + String(r).padStart(2, '0') : h + 'H'; }
+    const d = Math.floor(h / 24), rh = h % 24;
+    return rh ? d + 'D ' + rh + 'H' : d + 'D';
+  }
+
+  // <engine>
+  // Motor de regras da DEMONSTRAÇÃO. Em modo api, quem calcula é o servidor e devolve este mesmo formato.
+  const LIM = { respAviso: 20 * MIN, respGestor: 31 * MIN, contAviso: D, contGestor: 2 * D, volta: 3 * H, hoje: 6 * H };
+  function calcular(s) {
+    const ag = s.agora, alertas = [], resolvidos = [], retornos = [];
+    const grupos = s.grupos.filter((g) => g.ativo);
+    const gmap = new Map(grupos.map((g) => [g.id_grupo, g]));
+    const estados = new Map();
+    for (const g of grupos) {
+      const motivos = [];
+      if (g.ultima_cliente > g.ultima_time) {
+        const t = g.ultima_cliente, a = t + LIM.respAviso, k = t + LIM.respGestor;
+        if (ag >= a) motivos.push({ tipo: 'sem_resposta', nivel: ag >= k ? 'gestor' : 'aviso', desde: iso(t), aviso_em: iso(a), gestor_em: iso(k) });
+      }
+      {
+        const t = g.ultima_time, a = t + LIM.contAviso, k = t + LIM.contGestor;
+        if (ag >= a) motivos.push({ tipo: 'sem_contato', nivel: ag >= k ? 'gestor' : 'aviso', desde: iso(t), aviso_em: iso(a), gestor_em: iso(k) });
+      }
+      for (const p of s.promessas) {
+        if (p.id_grupo !== g.id_grupo) continue;
+        if (g.ultima_time > p.criada_em) continue;
+        if (ag >= p.prazo) motivos.push({ tipo: 'retorno_vencido', nivel: 'gestor', desde: iso(p.prazo), aviso_em: null, gestor_em: iso(p.prazo), promessa: p.texto });
+      }
+      let estado = 'ok';
+      if (motivos.length) {
+        const m = s.marcacoes[g.id_grupo];
+        const ativa = !!m && g.ultima_time <= m.em;
+        let nivel = motivos.some((x) => x.nivel === 'gestor') ? 'gestor' : 'aviso';
+        let voltou = null;
+        if (ativa && ag - m.em < LIM.volta) {
+          resolvidos.push({ id_grupo: g.id_grupo, cliente: g.cliente, especialista: g.especialista, marcado_por: m.por, como: m.como, marcado_em: iso(m.em), volta_em: iso(m.em + LIM.volta) });
+          estado = 'resolvido_por_fora';
+        } else {
+          if (ativa) { voltou = { como: m.como, marcado_por: m.por, marcado_em: iso(m.em) }; nivel = 'gestor'; }
+          alertas.push({ id_grupo: g.id_grupo, cliente: g.cliente, especialista: g.especialista, gestor: g.gestor, nivel, motivos, voltou_de_marcacao: voltou });
+          estado = nivel;
+        }
+      }
+      estados.set(g.id_grupo, estado);
+    }
+    const chave = (a) => {
+      let maxMin = 0, maxFr = 0;
+      for (const m of a.motivos) {
+        const d = ts(m.desde), k = ts(m.gestor_em);
+        maxMin = Math.max(maxMin, (ag - d) / MIN);
+        maxFr = Math.max(maxFr, (ag - d) / Math.max(1, k - d));
+      }
+      return a.nivel === 'gestor' ? 1e6 + maxMin + (a.voltou_de_marcacao ? 1e5 : 0) : maxFr * 1000;
+    };
+    alertas.sort((x, y) => chave(y) - chave(x) || x.cliente.localeCompare(y.cliente, 'pt-BR'));
+    resolvidos.sort((x, y) => ts(y.marcado_em) - ts(x.marcado_em));
+
+    for (const p of s.promessas) {
+      const g = gmap.get(p.id_grupo);
+      if (!g) continue;
+      const cumprida = g.ultima_time > p.criada_em;
+      if (cumprida && ag - g.ultima_time > D) continue;
+      const situacao = cumprida ? 'cumprido' : ag >= p.prazo ? 'vencido' : (p.prazo - ag <= LIM.hoje ? 'vence_hoje' : 'no_prazo');
+      retornos.push({ id: p.id, id_grupo: g.id_grupo, cliente: g.cliente, especialista: g.especialista, promessa: p.texto, prazo: iso(p.prazo), situacao });
+    }
+    const rk = { vencido: 0, vence_hoje: 1, no_prazo: 2, cumprido: 3 };
+    retornos.sort((x, y) => rk[x.situacao] - rk[y.situacao] || ts(x.prazo) - ts(y.prazo));
+
+    const ord = { gestor: 0, aviso: 1, resolvido_por_fora: 2, ok: 3 };
+    const porEsp = new Map();
+    for (const g of grupos) {
+      if (!porEsp.has(g.especialista)) porEsp.set(g.especialista, { especialista: g.especialista, clientes: [], sem_contato: 0, sem_resposta: 0, retornos_vencidos: 0 });
+      porEsp.get(g.especialista).clientes.push({ id_grupo: g.id_grupo, cliente: g.cliente, estado: estados.get(g.id_grupo) });
+    }
+    for (const a of alertas) {
+      const e = porEsp.get(a.especialista);
+      if (!e) continue;
+      if (a.motivos.some((m) => m.tipo === 'sem_contato' && m.nivel === 'gestor')) e.sem_contato++;
+      if (a.motivos.some((m) => m.tipo === 'sem_resposta' && m.nivel === 'gestor')) e.sem_resposta++;
+      e.retornos_vencidos += a.motivos.filter((m) => m.tipo === 'retorno_vencido').length;
+    }
+    const por_especialista = [...porEsp.values()].sort((x, y) => x.especialista.localeCompare(y.especialista, 'pt-BR'));
+    for (const e of por_especialista) e.clientes.sort((x, y) => ord[x.estado] - ord[y.estado] || x.cliente.localeCompare(y.cliente, 'pt-BR'));
+
+    const cnt = (tipo, nv) => alertas.filter((a) => a.motivos.some((m) => m.tipo === tipo && m.nivel === nv)).length;
+    let ultima = 0;
+    for (const g of grupos) ultima = Math.max(ultima, g.ultima_time, g.ultima_cliente);
+    return {
+      gerado_em: iso(ag),
+      usuario: s.usuario,
+      observador: { status: s.observador.status, desde: s.observador.desde ? iso(s.observador.desde) : null, ultima_mensagem_em: ultima ? iso(ultima) : null },
+      resumo: {
+        clientes_total: grupos.length, em_alerta: alertas.length, em_alerta_gestor: alertas.filter((a) => a.nivel === 'gestor').length,
+        sem_contato: { gestor: cnt('sem_contato', 'gestor'), aviso: cnt('sem_contato', 'aviso') },
+        sem_resposta: { gestor: cnt('sem_resposta', 'gestor'), aviso: cnt('sem_resposta', 'aviso') },
+        retornos_vencidos: alertas.reduce((n, a) => n + a.motivos.filter((m) => m.tipo === 'retorno_vencido').length, 0)
+      },
+      alertas, resolvidos_por_fora: resolvidos, por_especialista, retornos
+    };
+  }
+  // </engine>
+
+  // ---------- dados da demonstração ----------
+  const GESTOR = { 'Camila Duarte': 'Marcos Leal', 'Rafael Moura': 'Marcos Leal', 'Bianca Teixeira': 'Luciana Prado', 'Thiago Brandão': 'Luciana Prado' };
+  // [cliente, especialista, minutos desde a última mensagem do time, minutos desde a última do cliente]
+  const LISTA = [
+    ['Padaria Estrela do Sul', 'Camila Duarte', 190, 34], ['Clínica Vida Plena', 'Camila Duarte', 300, 22],
+    ['Auto Peças Ribeiro', 'Camila Duarte', 900, 1000], ['Construtora Alvorada', 'Camila Duarte', 45, 130],
+    ['Escola Novo Horizonte', 'Camila Duarte', 600, 4], ['Studio Lume', 'Camila Duarte', 80, 420],
+    ['Distribuidora Pinheiro', 'Camila Duarte', 1700, 1800],
+    ['Agro Campos Verdes', 'Rafael Moura', 2950, 3000], ['Mercado Boa Vista', 'Rafael Moura', 400, 8],
+    ['Oficina Torres & Filho', 'Rafael Moura', 160, 200], ['Têxtil Marajó', 'Rafael Moura', 30, 600],
+    ['Hotel Praia Serena', 'Rafael Moura', 1500, 1600], ['Transportes Rota Sul', 'Rafael Moura', 180, 400],
+    ['Gráfica Ponto Cor', 'Rafael Moura', 2000, 2100],
+    ['Academia Corpo em Movimento', 'Bianca Teixeira', 400, 18], ['Laboratório Sinapse', 'Bianca Teixeira', 90, 300],
+    ['Confeitaria Doce Vale', 'Bianca Teixeira', 1300, 21], ['Pet Shop Cauda Feliz', 'Bianca Teixeira', 240, 500],
+    ['Imobiliária Cantareira', 'Bianca Teixeira', 700, 900], ['Vidraçaria Cristal', 'Bianca Teixeira', 15, 12],
+    ['Cursos Livre Saber', 'Bianca Teixeira', 1550, 1650],
+    ['Corretora Maré Alta', 'Thiago Brandão', 5000, 5100], ['Móveis Casa Nova', 'Thiago Brandão', 140, 12],
+    ['Energia Solar Brilho', 'Thiago Brandão', 700, 800], ['Fisioterapia Equilíbrio', 'Thiago Brandão', 60, 500],
+    ['Café Torra Lenta', 'Thiago Brandão', 1000, 1100], ['Contabilidade Prisma', 'Thiago Brandão', 340, 700],
+    ['Floricultura Jardim Alto', 'Thiago Brandão', 2600, 2700]
+  ];
+  const DEMO = { off: 0, obsOn: true, obsDesde: null, voce: 'Camila Duarte', grupos: [], promessas: [], marc: {} };
+  const now = () => (IS_DEMO ? Date.now() + DEMO.off : Date.now());
+
+  function seed() {
+    const t0 = Date.now(), ago = (m) => t0 - m * MIN, ahead = (m) => t0 + m * MIN;
+    DEMO.off = 0; DEMO.obsOn = true; DEMO.obsDesde = null; DEMO.marc = {};
+    DEMO.grupos = LISTA.map((r, i) => ({ id_grupo: '120363040' + String(1001000 + i) + '@g.us', cliente: r[0], especialista: r[1], gestor: GESTOR[r[1]], ativo: true, ultima_time: ago(r[2]), ultima_cliente: ago(r[3]) }));
+    const id = (n) => DEMO.grupos.find((g) => g.cliente === n).id_grupo;
+    DEMO.promessas = [
+      { id: 'p1', id_grupo: id('Agro Campos Verdes'), texto: 'Enviar laudo da safra', criada_em: ago(2950), prazo: ago(1500) },
+      { id: 'p2', id_grupo: id('Transportes Rota Sul'), texto: 'Confirmar nova data de entrega', criada_em: ago(180), prazo: ago(60) },
+      { id: 'p3', id_grupo: id('Corretora Maré Alta'), texto: 'Retornar com análise do jurídico', criada_em: ago(5000), prazo: ago(3500) },
+      { id: 'p4', id_grupo: id('Pet Shop Cauda Feliz'), texto: 'Passar status da nota fiscal', criada_em: ago(240), prazo: ahead(120) },
+      { id: 'p5', id_grupo: id('Café Torra Lenta'), texto: 'Ver reajuste com o financeiro', criada_em: ago(1000), prazo: ahead(300) },
+      { id: 'p6', id_grupo: id('Studio Lume'), texto: 'Enviar proposta revisada', criada_em: ago(80), prazo: ahead(1000) },
+      { id: 'p7', id_grupo: id('Contabilidade Prisma'), texto: 'Agendar visita técnica', criada_em: ago(340), prazo: ahead(1100) },
+      { id: 'p8', id_grupo: id('Construtora Alvorada'), texto: 'Ver pendência com o financeiro', criada_em: ago(400), prazo: ago(30) },
+      { id: 'p9', id_grupo: id('Imobiliária Cantareira'), texto: 'Retornar sobre o chamado do sistema', criada_em: ago(1000), prazo: ago(650) }
+    ];
+    DEMO.marc[id('Distribuidora Pinheiro')] = { por: 'Camila Duarte', como: 'ligacao', em: ago(70) };
+    DEMO.marc[id('Cursos Livre Saber')] = { por: 'Bianca Teixeira', como: 'reuniao', em: ago(25) };
+    DEMO.marc[id('Gráfica Ponto Cor')] = { por: 'Rafael Moura', como: 'privado', em: ago(220) };
+  }
+  const snapDemo = () => ({ agora: now(), grupos: DEMO.grupos, promessas: DEMO.promessas, marcacoes: DEMO.marc, observador: { status: DEMO.obsOn ? 'conectado' : 'desconectado', desde: DEMO.obsDesde }, usuario: { nome: DEMO.voce, pode_marcar: true } });
+
+  // ---------- estado e dados ----------
+  const S = { radar: null, recebidoEm: 0, open: null, tv: false, seen: null, flash: new Set(), minuto: -1, erro: false, erroEm: 0 };
+  const refNow = () => (IS_DEMO ? now() : (S.radar ? ts(S.radar.gerado_em) + (Date.now() - S.recebidoEm) : Date.now()));
+  const podeMarcar = () => IS_DEMO || !!(S.radar && S.radar.usuario && S.radar.usuario.pode_marcar);
+
+  async function api(method, path, body) {
+    const r = await fetch(CFG.apiBase + path, { method, credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    if (!r.ok) { const e = new Error('http ' + r.status); e.status = r.status; throw e; }
+    return r.status === 204 ? null : r.json();
+  }
+
+  function applyRadar(r, announce) {
+    const prev = S.seen;
+    S.radar = r; S.recebidoEm = Date.now(); S.erro = false;
+    S.seen = new Map(r.alertas.map((a) => [a.id_grupo, a.nivel]));
+    const novos = [];
+    if (prev) for (const a of r.alertas) {
+      const p = prev.get(a.id_grupo);
+      if (!p) novos.push({ a, t: a.nivel === 'gestor' ? 'direto' : 'novo' });
+      else if (p === 'aviso' && a.nivel === 'gestor') novos.push({ a, t: 'subiu' });
+    }
+    S.flash = new Set(novos.map((n) => n.a.id_grupo));
+    render();
+    if (announce && novos.length) {
+      const txt = (n) => n.a.cliente + (n.t === 'subiu' ? ' subiu para o gestor' : n.t === 'direto' ? ' entrou em alerta e já está com o gestor' : ' entrou em alerta');
+      toast(novos.slice(0, 2).map(txt).join('. ') + (novos.length > 2 ? '. E mais ' + (novos.length - 2) + '.' : '.'));
+    }
+  }
+
+  async function refresh(announce) {
+    if (IS_DEMO) { applyRadar(calcular(snapDemo()), announce); return; }
+    try { applyRadar(await api('GET', '/radar'), false); }
+    catch (e) {
+      if (!S.erro) S.erroEm = Date.now();
+      S.erro = true;
+      if (!S.radar) $('lead').textContent = e && e.status === 401 ? 'Entre com a conta do Grupo Silva para ver o radar.' : 'Sem conexão com o servidor do Radar. Tentando de novo em instantes.';
+      else render();
+    }
+  }
+
+  async function marcar(a, como) {
+    try {
+      if (IS_DEMO) DEMO.marc[a.id_grupo] = { por: DEMO.voce, como, em: now() };
+      else await api('POST', '/marcacoes', { id_grupo: a.id_grupo, como });
+      S.open = null;
+      toast(a.cliente + ': marcado como resolvido por ' + COMO_TXT[como] + '.');
+      await refresh(false);
+    } catch (e) { toast(e && e.status === 403 ? 'Você não tem permissão para marcar.' : 'Não deu para marcar. Tente de novo em instantes.'); }
+  }
+  async function desfazer(r) {
+    try {
+      if (IS_DEMO) delete DEMO.marc[r.id_grupo];
+      else await api('DELETE', '/marcacoes/' + encodeURIComponent(r.id_grupo));
+      toast('Marcação desfeita. O alerta voltou.');
+      await refresh(false);
+    } catch (e) { toast('Não deu para desfazer. Só quem marcou, ou um gestor, pode desfazer.'); }
+  }
+
+  let toastTimer = null;
+  function toast(msg) {
+    const old = document.querySelector('.toast'); if (old) old.remove();
+    clearTimeout(toastTimer);
+    const t = el('div', 'toast', msg); t.setAttribute('role', 'status'); document.body.appendChild(t);
+    toastTimer = setTimeout(() => t.remove(), 3600);
+  }
+
+  // ---------- desenho ----------
+  function headline(a, ref) {
+    let best = null;
+    for (const m of a.motivos) {
+      const t = ref - ts(m.desde), score = (m.nivel === 'gestor' ? 1e12 : 0) + t;
+      if (!best || score > best.score) best = { m, t, score };
+    }
+    return best;
+  }
+  function motivoTexto(m, ref) {
+    const t = ref - ts(m.desde);
+    if (m.tipo === 'sem_resposta') return 'Mensagem sem resposta há ' + dur(t);
+    if (m.tipo === 'sem_contato') return 'Sem contato há ' + dur(t);
+    return 'Retorno vencido há ' + dur(t) + ': ' + lowerFirst(m.promessa || 'promessa');
+  }
+  function meter(m, ref) {
+    const d = ts(m.desde), k = ts(m.gestor_em), a = ts(m.aviso_em), total = Math.max(1, k - d);
+    const frac = Math.min(1, Math.max(0, (ref - d) / total));
+    const box = el('div', 'mt');
+    const bar = el('div', 'meter'); bar.setAttribute('aria-hidden', 'true');
+    const fill = el('i'); fill.style.width = (frac * 100) + '%';
+    const tick = el('b'); tick.style.left = (Math.min(1, Math.max(0, (a - d) / total)) * 100) + '%';
+    bar.append(fill, tick); box.appendChild(bar);
+    box.appendChild(el('div', 'up', 'Sobe ao gestor em ' + dur(k - ref)));
+    return box;
+  }
+
+  function linhaAlerta(a, ref) {
+    const g = a.nivel === 'gestor';
+    const row = el('div', 'row ' + (g ? 'g' : 'e') + (S.flash.has(a.id_grupo) ? ' flash' : ''));
+    row.setAttribute('role', 'listitem');
+    const h = headline(a, ref);
+
+    const badge = el('div', 'badge');
+    badge.append(el('span', 'big', big(h.t)), el('span', 'lab', TIPO_TXT[h.m.tipo]));
+    row.appendChild(badge);
+
+    const main = el('div', 'main');
+    main.appendChild(el('div', 'cli', a.cliente));
+    for (const m of a.motivos) {
+      const box = el('div');
+      box.appendChild(el('div', 'mot', motivoTexto(m, ref)));
+      if (m.nivel === 'aviso' && m.aviso_em && !a.voltou_de_marcacao) box.appendChild(meter(m, ref));
+      main.appendChild(box);
+    }
+    if (a.voltou_de_marcacao) {
+      const v = a.voltou_de_marcacao;
+      main.appendChild(el('span', 'sub', 'Marcado à mão há ' + dur(ref - ts(v.marcado_em)) + ' por ' + (COMO_TXT[v.como] || 'fora do grupo') + (v.marcado_por ? ' (' + v.marcado_por + ')' : '') + ', sem registro no grupo.'));
+    }
+    row.appendChild(main);
+
+    const owner = el('div', 'owner');
+    owner.appendChild(pill(a.especialista, g ? 'g' : 'e'));
+    owner.appendChild(el('small', null, g ? 'Gestor: ' + (a.gestor || 'não definido') : 'Aviso ao especialista'));
+    row.appendChild(owner);
+
+    const act = el('div', 'act admin');
+    if (podeMarcar()) {
+      if (S.open === a.id_grupo) {
+        const how = el('div', 'how');
+        for (const [k, lab] of COMO) { const b = el('button', 'chip', lab); b.type = 'button'; b.addEventListener('click', () => marcar(a, k)); how.appendChild(b); }
+        const x = el('button', 'link', 'Cancelar'); x.type = 'button'; x.addEventListener('click', () => { S.open = null; render(); }); how.appendChild(x);
+        act.appendChild(how);
+      } else {
+        const b = el('button', 'tick', '✓ Resolvi por fora'); b.type = 'button';
+        b.addEventListener('click', () => { S.open = a.id_grupo; render(); });
+        act.appendChild(b);
+      }
+    }
+    row.appendChild(act);
+    return row;
+  }
+
+  function setNum(id, v) { const e = $(id); e.textContent = String(v); e.classList.toggle('bad', v > 0); }
+  function setAw(id, n) { const e = $(id); e.hidden = !(n > 0); e.textContent = n > 0 ? '+' + n + ' em aviso' : ''; }
+
+  function render() {
+    const r = S.radar;
+    if (!r) return;
+    const ref = refNow();
+    const obsOk = r.observador.status === 'conectado' && !S.erro;
+
+    $('clock').textContent = hhmm(ref);
+
+    // observador
+    const ob = $('obs'), obsStatus = r.observador.status;
+    ob.className = 'obs ' + (obsStatus === 'conectado' ? 'on' : obsStatus === 'conectando' ? 'wait' : 'off');
+    if (obsStatus === 'conectado') $('obs-txt').textContent = 'Observador conectado' + (r.observador.ultima_mensagem_em ? ' · última mensagem há ' + dur(ref - ts(r.observador.ultima_mensagem_em)) : '');
+    else if (obsStatus === 'conectando') $('obs-txt').textContent = 'Observador reconectando';
+    else $('obs-txt').textContent = 'Observador desconectado' + (r.observador.desde ? ' desde ' + hhmm(ts(r.observador.desde)) : '');
+
+    // faixa de aviso
+    const off = $('offline');
+    if (S.erro) {
+      off.hidden = false; $('off-t').textContent = 'Radar sem conexão com o servidor';
+      $('off-p').textContent = 'Mostrando os dados de ' + hhmm(ts(r.gerado_em)) + '. O painel tenta de novo sozinho a cada minuto.';
+    } else if (obsStatus !== 'conectado') {
+      off.hidden = false;
+      $('off-t').textContent = obsStatus === 'conectando' ? 'Observador reconectando' : 'Observador desconectado';
+      $('off-p').textContent = (obsStatus === 'conectando' ? 'O número observador está voltando.' : 'Sem sinal do número observador' + (r.observador.desde ? ' desde ' + hhmm(ts(r.observador.desde)) : '') + '. O radar não está recebendo mensagens do grupo.') + ' Até normalizar, os alertas abaixo podem estar desatualizados.';
+    } else off.hidden = true;
+    $('resumo').classList.toggle('stale', !obsOk);
+
+    // números
+    const rs = r.resumo;
+    setNum('k-alertas', rs.em_alerta); setNum('k-contato', rs.sem_contato.gestor); setNum('k-resposta', rs.sem_resposta.gestor); setNum('k-retornos', rs.retornos_vencidos);
+    setAw('a-contato', rs.sem_contato.aviso); setAw('a-resposta', rs.sem_resposta.aviso);
+    $('k-total').textContent = 'de ' + rs.clientes_total + ' na carteira';
+
+    const lead = $('lead'); lead.textContent = '';
+    if (!rs.clientes_total) lead.textContent = 'Nenhum cliente cadastrado ainda. Quando o sistema estiver ligado, a carteira aparece aqui.';
+    else if (!obsOk) lead.append(el('b', 'hot', 'Atenção.'), ' Sem sinal confiável do observador: não dá para afirmar que está tudo em dia.');
+    else if (!rs.em_alerta) lead.append(el('b', null, 'Tudo em dia.'), ' Nenhum cliente precisa de ação agora.');
+    else lead.append(el('b', null, String(rs.em_alerta)), rs.em_alerta === 1 ? ' cliente precisa de ação agora. ' : ' clientes precisam de ação agora. ', el('b', 'hot', String(rs.em_alerta_gestor)), rs.em_alerta_gestor === 1 ? ' já subiu para o gestor.' : ' já subiram para o gestor.');
+
+    // agir agora
+    const box = $('alertas'); box.textContent = '';
+    if (!r.alertas.length) box.appendChild(el('div', 'empty', obsOk ? 'Tudo em dia. Nenhum cliente em alerta.' : 'Nenhum alerta calculado. Confira o observador.'));
+    for (const a of r.alertas) box.appendChild(linhaAlerta(a, ref));
+
+    // resolvidos por fora
+    const tm = $('t-manual'); tm.textContent = '';
+    if (!r.resolvidos_por_fora.length) { const tr = el('tr'); const c = el('td', 'muted', 'Nada marcado à mão nas últimas 3 horas.'); c.colSpan = 5; tr.appendChild(c); tm.appendChild(tr); }
+    for (const m of r.resolvidos_por_fora) {
+      const tr = el('tr');
+      td(tr, m.cliente); td(tr, m.marcado_por || 'Alguém do time');
+      const c3 = el('td'); c3.appendChild(pill(COMO[COMO.findIndex((c) => c[0] === m.como)] ? COMO.find((c) => c[0] === m.como)[1] : 'Por fora', 'm')); tr.appendChild(c3);
+      td(tr, hhmm(ts(m.marcado_em)) + ' · volta às ' + hhmm(ts(m.volta_em)) + ' (em ' + dur(ts(m.volta_em) - ref) + ') se não houver registro');
+      const ac = el('td', 'admin');
+      if (podeMarcar()) { const u = el('button', 'link', 'Desfazer'); u.type = 'button'; u.addEventListener('click', () => desfazer(m)); ac.appendChild(u); }
+      tr.appendChild(ac); tm.appendChild(tr);
+    }
+
+    // por especialista
+    const tt = $('t-time'); tt.textContent = '';
+    for (const e of r.por_especialista) {
+      const tr = el('tr');
+      const c1 = el('td'); c1.appendChild(document.createTextNode(e.especialista));
+      const dots = el('div', 'dots');
+      for (const c of e.clientes) {
+        const d = el('i', c.estado === 'gestor' ? 'd-g' : c.estado === 'aviso' ? 'd-e' : c.estado === 'resolvido_por_fora' ? 'd-r' : '');
+        d.title = c.cliente; dots.appendChild(d);
+      }
+      c1.appendChild(dots); tr.appendChild(c1);
+      td(tr, String(e.clientes.length), 'n');
+      for (const v of [e.sem_contato, e.sem_resposta, e.retornos_vencidos]) td(tr, String(v), 'n ' + (v > 0 ? 'hot' : 'zero'));
+      tt.appendChild(tr);
+    }
+
+    // retornos
+    const tp = $('t-ret'); tp.textContent = '';
+    if (!r.retornos.length) { const tr = el('tr'); const c = el('td', 'muted', 'Nenhum retorno prometido em aberto.'); c.colSpan = 4; tr.appendChild(c); tp.appendChild(tr); }
+    for (const p of r.retornos) {
+      const pz = ts(p.prazo), tr = el('tr', p.situacao === 'cumprido' ? 'done' : '');
+      const c1 = el('td'); c1.appendChild(document.createTextNode(p.cliente)); c1.appendChild(el('small', null, p.especialista)); tr.appendChild(c1);
+      td(tr, p.promessa);
+      const txt = p.situacao === 'cumprido' ? 'Prazo era ' + ddmm(pz) + ' ' + hhmm(pz) : (pz < ref ? 'Venceu há ' + dur(ref - pz) : 'Vence em ' + dur(pz - ref));
+      const c3 = td(tr, txt, p.situacao === 'vencido' ? 'hot' : '');
+      if (p.situacao !== 'cumprido') c3.appendChild(el('small', null, ddmm(pz) + ' · ' + hhmm(pz)));
+      const sit = { vencido: ['Vencido', 'g'], vence_hoje: ['Vence hoje', 'e'], no_prazo: ['No prazo', 'ok'], cumprido: ['Cumprido', 'ok'] }[p.situacao] || ['—', 'm'];
+      const c4 = el('td'); c4.appendChild(pill(sit[0], sit[1])); tr.appendChild(c4); tp.appendChild(tr);
+    }
+
+    if (IS_DEMO) $('ctl-obs').textContent = DEMO.obsOn ? 'Derrubar observador' : 'Religar observador';
+    S.flash = new Set();
+  }
+
+  // ---------- demonstração: controles ----------
+  function demoAct(a) {
+    if (a === 'avancar15' || a === 'avancar60') { DEMO.off += (a === 'avancar15' ? 15 : 60) * MIN; refresh(true); }
+    else if (a === 'time') {
+      const top = S.radar && S.radar.alertas[0];
+      if (!top) { toast('Nenhum alerta aberto para responder.'); return; }
+      const g = DEMO.grupos.find((x) => x.id_grupo === top.id_grupo); g.ultima_time = now();
+      refresh(false); toast(g.cliente + ': o time respondeu no grupo e o alerta saiu sozinho.');
+    } else if (a === 'cliente') {
+      const ok = new Set(); for (const e of S.radar.por_especialista) for (const c of e.clientes) if (c.estado === 'ok') ok.add(c.id_grupo);
+      const cand = DEMO.grupos.filter((g) => ok.has(g.id_grupo) && g.ultima_time >= g.ultima_cliente);
+      if (!cand.length) { toast('Todos os clientes em dia já têm mensagem sem resposta.'); return; }
+      const g = cand[Math.floor(Math.random() * cand.length)]; g.ultima_cliente = now();
+      refresh(false); toast(g.cliente + ': o cliente escreveu no grupo. O relógio de 20 min começou.');
+    } else if (a === 'obs') { DEMO.obsOn = !DEMO.obsOn; DEMO.obsDesde = now(); refresh(false); }
+    else if (a === 'reset') { seed(); S.seen = null; S.open = null; refresh(false); toast('Demonstração reiniciada.'); }
+  }
+
+  function setTv(on, gesto) {
+    S.tv = on; document.documentElement.classList.toggle('tv', on);
+    const b = $('tvbtn'); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? 'Sair do modo TV' : 'Modo TV';
+    try {
+      if (on && gesto && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+      if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    } catch (e) { /* tela cheia é opcional */ }
+  }
+
+  function tick() {
+    const ref = refNow(); $('clock').textContent = hhmm(ref);
+    const m = Math.floor(ref / MIN);
+    if (m !== S.minuto) { S.minuto = m; if (S.radar) { if (IS_DEMO) refresh(true); else render(); } }
+  }
+
+  function boot() {
+    if (IS_DEMO) {
+      seed();
+      const sel = $('voce');
+      for (const n of Object.keys(GESTOR)) { const o = el('option', null, n); o.value = n; sel.appendChild(o); }
+      sel.addEventListener('change', () => { DEMO.voce = sel.value; });
+      $('demo').addEventListener('click', (e) => { const b = e.target.closest('[data-act]'); if (b) demoAct(b.dataset.act); });
+    } else $('demo').hidden = true;
+    $('tvbtn').addEventListener('click', () => setTv(!S.tv, true));
+    document.addEventListener('keydown', (e) => {
+      if (e.target && e.target.closest && e.target.closest('select,input,textarea')) return;
+      if (e.key === 't' || e.key === 'T') setTv(!S.tv, true);
+      else if (e.key === 'Escape' && S.tv) setTv(false, true);
+    });
+    if (location.hash === '#tv') setTv(true, false);
+    S.minuto = Math.floor(refNow() / MIN);
+    refresh(false);
+    setInterval(tick, 5000);
+    if (!IS_DEMO) setInterval(() => refresh(false), CFG.pollMs);
+  }
+  boot();
+})();
+</script>
+
+</body></html>
