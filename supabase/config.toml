@@ -1,0 +1,3 @@
+# Configuração mínima do Supabase CLI. Migrations em supabase/migrations.
+# Aplicar no projeto remoto: npx supabase link --project-ref <ref> && npm run db:push
+project_id = "radar-cs"

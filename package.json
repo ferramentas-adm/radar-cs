@@ -1,0 +1,33 @@
+{
+  "name": "radar-cs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Radar CS — Grupo Silva: lê os grupos de WhatsApp dos clientes e alerta quando um cliente fica sem resposta, sem contato ou com retorno vencido.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "dev:sem-banco": "tsx watch src/main.ts --sem-banco",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/src/main.js",
+    "test": "vitest run",
+    "test:painel": "node frontend/tests/engine-demo.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "db:push": "npx supabase db push",
+    "webhook:configurar": "tsx scripts/configurar-webhook.ts",
+    "descoberta:resumo": "tsx scripts/resumo-descoberta.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "fastify": "^5.12.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
