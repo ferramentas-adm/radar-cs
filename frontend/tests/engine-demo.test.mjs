@@ -41,7 +41,7 @@ t('cumprido há mais de 24h some da lista', () => assert.equal(run([G({ ultima_t
 
 // resolvi por fora
 const base = { ultima_time: ago(1700), ultima_cliente: ago(1800) };
-t('marcação a 2h59: sai de agir agora e vai para resolvidos', () => { const r = run([G(base)], [], { 'g1@g.us': { por: 'Esp A', como: 'ligacao', em: ago(179) } }); assert.equal(r.alertas.length, 0); assert.equal(r.resolvidos_por_fora.length, 1); assert.equal(ts(r.resolvidos_por_fora[0].volta_em), ago(179) + 3 * H); assert.equal(r.por_especialista[0].clientes[0].estado, 'resolvido_por_fora'); });
+t('ação por fora a 2h59: sai da lista de alertas e vai para ações por fora', () => { const r = run([G(base)], [], { 'g1@g.us': { por: 'Esp A', como: 'ligacao', em: ago(179) } }); assert.equal(r.alertas.length, 0); assert.equal(r.resolvidos_por_fora.length, 1); assert.equal(ts(r.resolvidos_por_fora[0].volta_em), ago(179) + 3 * H); assert.equal(r.por_especialista[0].clientes[0].estado, 'resolvido_por_fora'); });
 t('marcação a 3h sem registro: volta em nível gestor com aviso', () => { const r = run([G(base)], [], { 'g1@g.us': { por: 'Esp A', como: 'privado', em: ago(180) } }); assert.equal(r.resolvidos_por_fora.length, 0); assert.equal(r.alertas[0].nivel, 'gestor'); assert.equal(r.alertas[0].voltou_de_marcacao.como, 'privado'); });
 t('time escreveu depois da marcação: marcação encerrada, sem alerta', () => { const r = run([G({ ultima_time: ago(30), ultima_cliente: ago(1800) })], [], { 'g1@g.us': { por: 'Esp A', como: 'reuniao', em: ago(100) } }); assert.equal(r.alertas.length, 0); assert.equal(r.resolvidos_por_fora.length, 0); });
 t('marcação sem alerta ativo não aparece em resolvidos', () => { const r = run([G({ ultima_time: ago(10), ultima_cliente: ago(900) })], [], { 'g1@g.us': { por: 'Esp A', como: 'ligacao', em: ago(20) } }); assert.equal(r.resolvidos_por_fora.length, 0); });
@@ -65,5 +65,22 @@ t('gestor antes de aviso; resumo e por_especialista batem', () => {
 });
 t('retorno + sem contato no mesmo cliente: dois motivos, um alerta', () => { const r = run([G({ ultima_time: ago(3000), ultima_cliente: ago(3100) })], [P({ criada_em: ago(3000), prazo: ago(1500) })]); assert.equal(r.alertas.length, 1); assert.equal(r.alertas[0].motivos.length, 2); });
 t('alerta nunca carrega texto de mensagem', () => assert.ok(!JSON.stringify(run([G({ ultima_cliente: ago(40) })])).includes('texto_mensagem')));
+
+// pilha de mensagens (ranking de pendentes por cliente)
+t('pilha: sem lista de mensagens, vale só a última do cliente', () => { const p = run([G({ ultima_cliente: ago(10) })]).pendentes; assert.equal(p.length, 1); assert.equal(p[0].quantidade, 1); assert.equal(ts(p[0].mais_antiga_desde), ago(10)); });
+t('pilha: cliente já respondido pelo time não entra', () => assert.equal(run([G({ ultima_cliente: ago(60), ultima_time: ago(5) })]).pendentes.length, 0));
+t('pilha: conta só as mensagens depois da última do time', () => { const p = run([G({ ultima_time: ago(50), ultima_cliente: ago(5), pend: [ago(5), ago(20), ago(40), ago(70)] })]).pendentes[0]; assert.equal(p.quantidade, 3); assert.equal(ts(p.mais_antiga_desde), ago(40)); });
+t('pilha: mais mensagens primeiro; empate pela mais antiga', () => {
+  const r = run([
+    G({ id_grupo: 'a', cliente: 'A', pend: [ago(5)], ultima_cliente: ago(5) }),
+    G({ id_grupo: 'b', cliente: 'B', pend: [ago(5), ago(8), ago(9)], ultima_cliente: ago(5) }),
+    G({ id_grupo: 'c', cliente: 'C', pend: [ago(5), ago(15)], ultima_cliente: ago(5) }),
+    G({ id_grupo: 'd', cliente: 'D', pend: [ago(5), ago(30)], ultima_cliente: ago(5) })
+  ]).pendentes;
+  assert.deepEqual(r.map((x) => x.id_grupo), ['b', 'd', 'c', 'a']);
+});
+t('pilha: estado acompanha o alerta do cliente', () => { const r = run([G({ id_grupo: 'a', pend: [ago(40), ago(45)], ultima_cliente: ago(40) }), G({ id_grupo: 'b', pend: [ago(3), ago(4)], ultima_cliente: ago(3) })]).pendentes; assert.equal(r.find((x) => x.id_grupo === 'a').estado, 'gestor'); assert.equal(r.find((x) => x.id_grupo === 'b').estado, 'ok'); });
+t('pilha: grupo inativo não entra', () => assert.equal(run([G({ ativo: false, ultima_cliente: ago(5) })]).pendentes.length, 0));
+t('pilha: não carrega texto de mensagem', () => assert.ok(!/texto/i.test(JSON.stringify(run([G({ ultima_cliente: ago(40), pend: [ago(40), ago(50)] })]).pendentes))));
 
 console.log('\n' + n + ' casos passaram');

@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: painel de parede em uma coluna larga. Faixa de quatro números, "Agir agora" com o tempo decorrido como destaque de cada linha, resolvidos por fora, e a carteira por especialista ao lado dos retornos prometidos. Identidade do Grupo Silva: preto, verde-limão, Anton, Archivo e IBM Plex Mono. Visual único e escuro, por escolha da marca. */
+/* Layout: painel de parede em uma coluna larga. Faixa de quatro números, "Precisam de ação" com o tempo decorrido como destaque de cada linha, ações feitas por fora, e a carteira por especialista ao lado dos retornos prometidos. Identidade do Grupo Silva: preto, verde-limão, Anton, Archivo e IBM Plex Mono. Visual único e escuro, por escolha da marca. */
 :root{
   --bg:#0A0A0A; --card:#141414; --card2:#1B1B1A; --line:#262626; --fg:#F4F4EE; --mut:#9A9A92;
   --lime:#C8E000; --red:#FF5A4F; --amber:#FFB020;
@@ -104,6 +104,21 @@ tr.done td{opacity:.55}
 .dots{display:flex;flex-wrap:wrap;gap:3px;margin-top:.5rem;max-width:16rem}
 .dots i{width:.7rem;height:.7rem;border-radius:2px;background:rgba(200,224,0,.35)}
 .dots i.d-e{background:var(--amber)} .dots i.d-g{background:var(--red)} .dots i.d-r{background:transparent;box-shadow:inset 0 0 0 1.5px var(--mut)}
+.modal{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.72)}
+.dlg{width:100%;max-width:30rem;background:var(--card2);box-shadow:0 1.5rem 4rem rgba(0,0,0,.6)}
+.dlg .mcli{font-weight:700;font-size:1.25rem;margin:.75rem 0 .25rem}
+.dlg .how{justify-content:flex-start;margin:.25rem 0 .75rem}
+.dlg .chip{font-size:.875rem;padding:.65rem .9rem}
+.dlg .chip[aria-checked=true]{border-color:var(--lime);color:var(--lime);background:rgba(200,224,0,.12)}
+.dlg .tick:disabled{opacity:.4;cursor:not-allowed}
+.mact{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:.5rem;margin-top:1rem}
+.pile{display:flex;align-items:center;gap:.25rem .75rem;flex-wrap:wrap}
+.pile .dots{margin-top:0;max-width:14rem}
+.pn{font-family:var(--display);font-size:clamp(1.5rem,2.2vw,2.25rem);line-height:1;min-width:1.6ch;font-variant-numeric:tabular-nums}
+.pn.g{color:var(--red)} .pn.e{color:var(--amber)}
+.pile .mais{font-family:var(--mono);font-size:.6875rem;color:var(--mut);align-self:center}
+td.rk{font-family:var(--mono);color:var(--mut);width:2.5rem}
+html.tv #t-pilha tr:nth-child(n+6){display:none}
 .legend{display:flex;flex-wrap:wrap;gap:.25rem .875rem;font-family:var(--mono);font-size:.6875rem;color:var(--mut);margin:0 0 .75rem}
 .legend span{display:inline-flex;align-items:center;gap:.35rem}
 .legend i{width:.6rem;height:.6rem;border-radius:2px;display:inline-block;background:rgba(200,224,0,.35)}
@@ -149,7 +164,7 @@ html.tv .tvbtn{opacity:.5}
       <button class="ctl" type="button" data-act="cliente">Cliente escreve num grupo</button>
       <button class="ctl" type="button" data-act="obs" id="ctl-obs">Derrubar observador</button>
       <button class="ctl" type="button" data-act="reset">Reiniciar</button>
-      <label class="who" for="voce">Marcar como <select id="voce"></select></label>
+      <label class="who" for="voce">Registrar como <select id="voce"></select></label>
     </div>
     <p class="demo-note">O tempo é simulado e nada aqui fala com o WhatsApp. Quando o número observador estiver ligado, a resposta do time no grupo tira o alerta sozinha.</p>
   </div>
@@ -169,16 +184,25 @@ html.tv .tvbtn{opacity:.5}
   </section>
 
   <section class="card" id="agir">
-    <h2>Agir agora</h2>
-    <p class="note">Respondeu no grupo, o alerta sai sozinho. Resolveu por ligação, privado ou reunião, marque aqui.</p>
+    <h2>Precisam de ação</h2>
+    <p class="note">Respondeu no grupo, o alerta sai sozinho. Agiu por ligação, privado ou reunião? Depois de agir, registre a ação aqui.</p>
     <div class="alerts" id="alertas" role="list"></div>
   </section>
 
-  <section class="card" id="manual">
-    <h2>Resolvidos por fora</h2>
-    <p class="note">Marcados à mão nas últimas 3 horas. Se não aparecer registro no grupo em 3 horas, o alerta volta em vermelho.</p>
+  <section class="card" id="pilha">
+    <h2>Pilha de mensagens</h2>
+    <p class="note">Clientes com mais mensagens esperando resposta desde a última mensagem do time. Cada quadrado é uma mensagem do cliente.</p>
     <div class="tw"><table>
-      <thead><tr><th>Cliente</th><th>Marcado por</th><th>Como</th><th>Quando</th><th class="admin"></th></tr></thead>
+      <thead><tr><th class="n">#</th><th>Cliente</th><th>Mensagens</th><th>A mais antiga</th><th>Situação</th></tr></thead>
+      <tbody id="t-pilha"></tbody></table></div>
+    <p class="note" id="pilha-mais" hidden></p>
+  </section>
+
+  <section class="card" id="manual">
+    <h2>Ações feitas por fora</h2>
+    <p class="note">Registradas à mão nas últimas 3 horas. Se não aparecer registro no grupo em 3 horas, o alerta volta em vermelho.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Cliente</th><th>Registrado por</th><th>Como</th><th>Quando</th><th class="admin"></th></tr></thead>
       <tbody id="t-manual"></tbody></table></div>
   </section>
 
@@ -186,7 +210,7 @@ html.tv .tvbtn{opacity:.5}
     <section class="card" id="time">
       <h2>Por especialista</h2>
       <p class="note">Quantos clientes de cada um estão fora do prazo agora. Cada quadrado é um cliente.</p>
-      <p class="legend"><span><i></i>em dia</span><span><i class="d-e"></i>aviso</span><span><i class="d-g"></i>gestor</span><span><i class="d-r"></i>resolvido por fora</span></p>
+      <p class="legend"><span><i></i>em dia</span><span><i class="d-e"></i>aviso</span><span><i class="d-g"></i>gestor</span><span><i class="d-r"></i>ação feita por fora</span></p>
       <div class="tw"><table>
         <thead><tr><th>Especialista</th><th class="n">Clientes</th><th class="n">Sem contato</th><th class="n">Sem resposta</th><th class="n">Retornos vencidos</th></tr></thead>
         <tbody id="t-time"></tbody></table></div>
@@ -200,11 +224,25 @@ html.tv .tvbtn{opacity:.5}
     </section>
   </div>
 
+  <div class="modal" id="modal" hidden>
+    <div class="dlg card" role="dialog" aria-modal="true" aria-labelledby="m-t" aria-describedby="m-p">
+      <h2 id="m-t">Registrar ação feita</h2>
+      <p class="mcli" id="m-cli"></p>
+      <p class="note" id="m-p">Confirme só depois de agir. Como você agiu com o cliente?</p>
+      <div class="how" id="m-how" role="radiogroup" aria-label="Como você agiu"></div>
+      <p class="note">O alerta sai da lista de clientes que precisam de ação. Se não aparecer mensagem do time no grupo em 3 horas, ele volta em vermelho para o gestor.</p>
+      <div class="mact">
+        <button class="link" id="m-cancel" type="button">Cancelar</button>
+        <button class="tick" id="m-ok" type="button" disabled>Confirmar ação feita</button>
+      </div>
+    </div>
+  </div>
+
   <div class="rules" id="regras">
     <span><b>Sem resposta:</b> <em>20 min aviso ao especialista</em> · <i>31 min gestor</i></span>
     <span><b>Sem contato:</b> <em>1 dia aviso ao especialista</em> · <i>2 dias gestor</i></span>
     <span><b>Retorno vencido:</b> <i>direto pro gestor</i></span>
-    <span><b>Marcado à mão:</b> <i>volta em 3h sem registro no grupo</i></span>
+    <span><b>Ação feita por fora:</b> <i>volta em 3h sem registro no grupo</i></span>
   </div>
 </div>
 
@@ -250,8 +288,11 @@ html.tv .tvbtn{opacity:.5}
   // Motor de regras da DEMONSTRAÇÃO. Em modo api, quem calcula é o servidor e devolve este mesmo formato.
   const LIM = { respAviso: 20 * MIN, respGestor: 31 * MIN, contAviso: D, contGestor: 2 * D, volta: 3 * H, hoje: 6 * H };
   function calcular(s) {
-    const ag = s.agora, alertas = [], resolvidos = [], retornos = [];
+    const ag = s.agora, alertas = [], resolvidos = [], retornos = [], pendentes = [];
     const grupos = s.grupos.filter((g) => g.ativo);
+    // Mensagens do cliente esperando resposta: as que chegaram depois da última mensagem do time.
+    // Sem a lista g.pend, vale só a última mensagem do cliente (quando ela é posterior à do time).
+    const fila = (g) => (Array.isArray(g.pend) ? g.pend : (g.ultima_cliente > g.ultima_time ? [g.ultima_cliente] : [])).filter((t) => t > g.ultima_time).sort((a, b) => a - b);
     const gmap = new Map(grupos.map((g) => [g.id_grupo, g]));
     const estados = new Map();
     for (const g of grupos) {
@@ -285,7 +326,10 @@ html.tv .tvbtn{opacity:.5}
         }
       }
       estados.set(g.id_grupo, estado);
+      const pl = fila(g);
+      if (pl.length) pendentes.push({ id_grupo: g.id_grupo, cliente: g.cliente, especialista: g.especialista, quantidade: pl.length, mais_antiga_desde: iso(pl[0]), estado });
     }
+    pendentes.sort((x, y) => y.quantidade - x.quantidade || ts(x.mais_antiga_desde) - ts(y.mais_antiga_desde) || x.cliente.localeCompare(y.cliente, 'pt-BR'));
     const chave = (a) => {
       let maxMin = 0, maxFr = 0;
       for (const m of a.motivos) {
@@ -338,7 +382,7 @@ html.tv .tvbtn{opacity:.5}
         sem_resposta: { gestor: cnt('sem_resposta', 'gestor'), aviso: cnt('sem_resposta', 'aviso') },
         retornos_vencidos: alertas.reduce((n, a) => n + a.motivos.filter((m) => m.tipo === 'retorno_vencido').length, 0)
       },
-      alertas, resolvidos_por_fora: resolvidos, por_especialista, retornos
+      alertas, pendentes, resolvidos_por_fora: resolvidos, por_especialista, retornos
     };
   }
   // </engine>
@@ -364,13 +408,19 @@ html.tv .tvbtn{opacity:.5}
     ['Café Torra Lenta', 'Thiago Brandão', 1000, 1100], ['Contabilidade Prisma', 'Thiago Brandão', 340, 700],
     ['Floricultura Jardim Alto', 'Thiago Brandão', 2600, 2700]
   ];
+  // Minutos atrás de cada mensagem do cliente que ainda espera resposta (a mais recente é a da LISTA). Quem não aparece aqui tem uma só.
+  const PILHA = {
+    'Padaria Estrela do Sul': [34, 41, 78, 120], 'Clínica Vida Plena': [22, 25, 40], 'Escola Novo Horizonte': [4, 6],
+    'Mercado Boa Vista': [8, 9, 11], 'Academia Corpo em Movimento': [18, 19], 'Vidraçaria Cristal': [12, 13],
+    'Móveis Casa Nova': [12, 13, 14, 16, 18]
+  };
   const DEMO = { off: 0, obsOn: true, obsDesde: null, voce: 'Camila Duarte', grupos: [], promessas: [], marc: {} };
   const now = () => (IS_DEMO ? Date.now() + DEMO.off : Date.now());
 
   function seed() {
     const t0 = Date.now(), ago = (m) => t0 - m * MIN, ahead = (m) => t0 + m * MIN;
     DEMO.off = 0; DEMO.obsOn = true; DEMO.obsDesde = null; DEMO.marc = {};
-    DEMO.grupos = LISTA.map((r, i) => ({ id_grupo: '120363040' + String(1001000 + i) + '@g.us', cliente: r[0], especialista: r[1], gestor: GESTOR[r[1]], ativo: true, ultima_time: ago(r[2]), ultima_cliente: ago(r[3]) }));
+    DEMO.grupos = LISTA.map((r, i) => ({ id_grupo: '120363040' + String(1001000 + i) + '@g.us', cliente: r[0], especialista: r[1], gestor: GESTOR[r[1]], ativo: true, ultima_time: ago(r[2]), ultima_cliente: ago(r[3]), pend: r[3] < r[2] ? (PILHA[r[0]] || [r[3]]).map(ago) : [] }));
     const id = (n) => DEMO.grupos.find((g) => g.cliente === n).id_grupo;
     DEMO.promessas = [
       { id: 'p1', id_grupo: id('Agro Campos Verdes'), texto: 'Enviar laudo da safra', criada_em: ago(2950), prazo: ago(1500) },
@@ -434,17 +484,17 @@ html.tv .tvbtn{opacity:.5}
       if (IS_DEMO) DEMO.marc[a.id_grupo] = { por: DEMO.voce, como, em: now() };
       else await api('POST', '/marcacoes', { id_grupo: a.id_grupo, como });
       S.open = null;
-      toast(a.cliente + ': marcado como resolvido por ' + COMO_TXT[como] + '.');
+      toast(a.cliente + ': ação registrada (' + COMO_TXT[como] + '). Se não houver registro no grupo em 3 horas, o alerta volta.');
       await refresh(false);
-    } catch (e) { toast(e && e.status === 403 ? 'Você não tem permissão para marcar.' : 'Não deu para marcar. Tente de novo em instantes.'); }
+    } catch (e) { toast(e && e.status === 403 ? 'Você não tem permissão para registrar ações.' : e && e.status === 409 ? 'Esse cliente já tem uma ação registrada.' : 'Não deu para registrar. Tente de novo em instantes.'); }
   }
   async function desfazer(r) {
     try {
       if (IS_DEMO) delete DEMO.marc[r.id_grupo];
       else await api('DELETE', '/marcacoes/' + encodeURIComponent(r.id_grupo));
-      toast('Marcação desfeita. O alerta voltou.');
+      toast('Registro desfeito. O alerta voltou.');
       await refresh(false);
-    } catch (e) { toast('Não deu para desfazer. Só quem marcou, ou um gestor, pode desfazer.'); }
+    } catch (e) { toast('Não deu para desfazer. Só quem registrou, ou um gestor, pode desfazer.'); }
   }
 
   let toastTimer = null;
@@ -502,7 +552,7 @@ html.tv .tvbtn{opacity:.5}
     }
     if (a.voltou_de_marcacao) {
       const v = a.voltou_de_marcacao;
-      main.appendChild(el('span', 'sub', 'Marcado à mão há ' + dur(ref - ts(v.marcado_em)) + ' por ' + (COMO_TXT[v.como] || 'fora do grupo') + (v.marcado_por ? ' (' + v.marcado_por + ')' : '') + ', sem registro no grupo.'));
+      main.appendChild(el('span', 'sub', 'Ação registrada há ' + dur(ref - ts(v.marcado_em)) + ' (' + (COMO_TXT[v.como] || 'fora do grupo') + (v.marcado_por ? ', por ' + v.marcado_por : '') + '), sem registro no grupo.'));
     }
     row.appendChild(main);
 
@@ -513,19 +563,42 @@ html.tv .tvbtn{opacity:.5}
 
     const act = el('div', 'act admin');
     if (podeMarcar()) {
-      if (S.open === a.id_grupo) {
-        const how = el('div', 'how');
-        for (const [k, lab] of COMO) { const b = el('button', 'chip', lab); b.type = 'button'; b.addEventListener('click', () => marcar(a, k)); how.appendChild(b); }
-        const x = el('button', 'link', 'Cancelar'); x.type = 'button'; x.addEventListener('click', () => { S.open = null; render(); }); how.appendChild(x);
-        act.appendChild(how);
-      } else {
-        const b = el('button', 'tick', '✓ Resolvi por fora'); b.type = 'button';
-        b.addEventListener('click', () => { S.open = a.id_grupo; render(); });
-        act.appendChild(b);
-      }
+      const b = el('button', 'tick', 'Registrar ação feita'); b.type = 'button';
+      b.addEventListener('click', () => abrirRegistro(a));
+      act.appendChild(b);
     }
     row.appendChild(act);
     return row;
+  }
+
+  // ---------- janela de confirmação: registrar ação feita por fora ----------
+  const M = { a: null, como: null, foco: null };
+  function abrirRegistro(a) {
+    M.a = a; M.como = null; M.foco = document.activeElement;
+    $('m-cli').textContent = a.cliente;
+    $('m-ok').disabled = true;
+    const how = $('m-how'); how.textContent = '';
+    for (const [k, lab] of COMO) {
+      const b = el('button', 'chip', lab); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', 'false'); b.dataset.k = k;
+      b.addEventListener('click', () => {
+        M.como = k; $('m-ok').disabled = false;
+        for (const x of how.children) x.setAttribute('aria-checked', String(x === b));
+      });
+      how.appendChild(b);
+    }
+    $('modal').hidden = false;
+    how.firstChild.focus();
+  }
+  function fecharRegistro() {
+    $('modal').hidden = true; M.a = null; M.como = null;
+    if (M.foco && M.foco.isConnected && M.foco.focus) M.foco.focus();
+    M.foco = null;
+  }
+  function confirmarRegistro() {
+    const a = M.a, como = M.como;
+    if (!a || !como) return;
+    fecharRegistro();
+    marcar(a, como);
   }
 
   function setNum(id, v) { const e = $(id); e.textContent = String(v); e.classList.toggle('bad', v > 0); }
@@ -575,9 +648,33 @@ html.tv .tvbtn{opacity:.5}
     if (!r.alertas.length) box.appendChild(el('div', 'empty', obsOk ? 'Tudo em dia. Nenhum cliente em alerta.' : 'Nenhum alerta calculado. Confira o observador.'));
     for (const a of r.alertas) box.appendChild(linhaAlerta(a, ref));
 
+    // pilha de mensagens (ranking de clientes com mensagens esperando resposta)
+    const tpi = $('t-pilha'); tpi.textContent = '';
+    const pil = r.pendentes || [], MAXP = 8;
+    if (!pil.length) { const tr = el('tr'); const c = el('td', 'muted', 'Nenhuma mensagem de cliente esperando resposta.'); c.colSpan = 5; tr.appendChild(c); tpi.appendChild(tr); }
+    pil.slice(0, MAXP).forEach((p, i) => {
+      const tr = el('tr');
+      td(tr, String(i + 1), 'n rk');
+      const c1 = el('td'); c1.appendChild(document.createTextNode(p.cliente)); c1.appendChild(el('small', null, p.especialista)); tr.appendChild(c1);
+      const cor = p.estado === 'gestor' ? 'g' : p.estado === 'aviso' ? 'e' : '';
+      const c2 = el('td'), pile = el('div', 'pile');
+      pile.appendChild(el('span', 'pn' + (cor ? ' ' + cor : ''), String(p.quantidade)));
+      const dots = el('div', 'dots'), shown = Math.min(p.quantidade, 12);
+      for (let k = 0; k < shown; k++) dots.appendChild(el('i', cor ? 'd-' + cor : p.estado === 'resolvido_por_fora' ? 'd-r' : ''));
+      pile.appendChild(dots);
+      if (p.quantidade > shown) pile.appendChild(el('span', 'mais', '+' + (p.quantidade - shown)));
+      c2.appendChild(pile); tr.appendChild(c2);
+      td(tr, 'há ' + dur(ref - ts(p.mais_antiga_desde)));
+      const sit = { gestor: ['Gestor', 'g'], aviso: ['Aviso', 'e'], resolvido_por_fora: ['Por fora', 'm'], ok: ['No prazo', 'ok'] }[p.estado] || ['—', 'm'];
+      const c4 = el('td'); c4.appendChild(pill(sit[0], sit[1])); tr.appendChild(c4);
+      tpi.appendChild(tr);
+    });
+    const pm = $('pilha-mais'); pm.hidden = pil.length <= MAXP;
+    pm.textContent = pil.length > MAXP ? '+ ' + (pil.length - MAXP) + (pil.length - MAXP === 1 ? ' outro cliente' : ' outros clientes') + ' com mensagem esperando resposta.' : '';
+
     // resolvidos por fora
     const tm = $('t-manual'); tm.textContent = '';
-    if (!r.resolvidos_por_fora.length) { const tr = el('tr'); const c = el('td', 'muted', 'Nada marcado à mão nas últimas 3 horas.'); c.colSpan = 5; tr.appendChild(c); tm.appendChild(tr); }
+    if (!r.resolvidos_por_fora.length) { const tr = el('tr'); const c = el('td', 'muted', 'Nenhuma ação registrada à mão nas últimas 3 horas.'); c.colSpan = 5; tr.appendChild(c); tm.appendChild(tr); }
     for (const m of r.resolvidos_por_fora) {
       const tr = el('tr');
       td(tr, m.cliente); td(tr, m.marcado_por || 'Alguém do time');
@@ -634,7 +731,7 @@ html.tv .tvbtn{opacity:.5}
       const ok = new Set(); for (const e of S.radar.por_especialista) for (const c of e.clientes) if (c.estado === 'ok') ok.add(c.id_grupo);
       const cand = DEMO.grupos.filter((g) => ok.has(g.id_grupo) && g.ultima_time >= g.ultima_cliente);
       if (!cand.length) { toast('Todos os clientes em dia já têm mensagem sem resposta.'); return; }
-      const g = cand[Math.floor(Math.random() * cand.length)]; g.ultima_cliente = now();
+      const g = cand[Math.floor(Math.random() * cand.length)]; g.ultima_cliente = now(); g.pend = [now()];
       refresh(false); toast(g.cliente + ': o cliente escreveu no grupo. O relógio de 20 min começou.');
     } else if (a === 'obs') { DEMO.obsOn = !DEMO.obsOn; DEMO.obsDesde = now(); refresh(false); }
     else if (a === 'reset') { seed(); S.seen = null; S.open = null; refresh(false); toast('Demonstração reiniciada.'); }
@@ -664,7 +761,22 @@ html.tv .tvbtn{opacity:.5}
       $('demo').addEventListener('click', (e) => { const b = e.target.closest('[data-act]'); if (b) demoAct(b.dataset.act); });
     } else $('demo').hidden = true;
     $('tvbtn').addEventListener('click', () => setTv(!S.tv, true));
+    $('m-cancel').addEventListener('click', fecharRegistro);
+    $('m-ok').addEventListener('click', confirmarRegistro);
+    $('modal').addEventListener('mousedown', (e) => { if (e.target === $('modal')) fecharRegistro(); });
     document.addEventListener('keydown', (e) => {
+      if (!$('modal').hidden) {
+        // com a janela aberta, o teclado fica só nela
+        if (e.key === 'Escape') { e.preventDefault(); fecharRegistro(); }
+        else if (e.key === 'Tab') {
+          const f = [...$('modal').querySelectorAll('button:not(:disabled)')];
+          if (!f.length) return;
+          const i = f.indexOf(document.activeElement);
+          if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+          else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+        }
+        return;
+      }
       if (e.target && e.target.closest && e.target.closest('select,input,textarea')) return;
       if (e.key === 't' || e.key === 'T') setTv(!S.tv, true);
       else if (e.key === 'Escape' && S.tv) setTv(false, true);

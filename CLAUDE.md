@@ -10,7 +10,7 @@ Documentos de referência (copiar para `docs/` antes de começar):
 - `docs/Radar CS.md` — texto do primeiro protótipo
 - `docs/api-contract.md` — contrato da API que o painel lê (`GET /api/radar`, marcações). **O backend implementa este contrato; não mudar o formato sem mudar o painel.**
 - `frontend/index.html` — painel pronto, página única. Sem configuração abre em modo demonstração (clientes fictícios, tempo simulado). Com `window.RADAR_CONFIG = { modo: 'api', apiBase: '/api' }` lê a API real. Modo TV: `#tv` ou tecla T.
-- `frontend/tests/engine-demo.test.mjs` — 23 casos de limite das regras (19/20/31 min, 23h59/24h/48h, 2h59/3h, retorno vencido). O motor real do passo 4 deve passar nos mesmos casos (os 20/31 min equivalem ao nível de urgência médio).
+- `frontend/tests/engine-demo.test.mjs` — 30 casos de limite das regras (19/20/31 min, 23h59/24h/48h, 2h59/3h, retorno vencido, pilha de mensagens pendentes). O motor real do passo 4 deve passar nos mesmos casos (os 20/31 min equivalem ao nível de urgência médio).
 - `docs/descoberta-uazapi.md` — o que os payloads reais do passo 1 mostraram (sender LID, `messageType`, campos úteis, pendências).
 
 Se este arquivo e a especificação divergirem, vale este arquivo (ele já incorpora a decisão pela uazapi). Dúvida de regra de negócio: perguntar à Ju antes de decidir.
@@ -87,7 +87,7 @@ RLS ligado em tudo. O backend usa a service role; o painel nunca fala direto com
 | Sem contato | tempo desde a última mensagem do time | 1 dia | 2 dias |
 | Retorno vencido | promessa aberta passou do prazo | não tem | assim que vence |
 
-Prazos de "sem resposta" por nível de urgência (aprovados; ficam na tabela de configuração `prazos_urgencia`):
+Prazos de "sem resposta" por nível de urgência (**aprovados pela Julia**; ficam na tabela de configuração `prazos_urgencia`):
 
 | Nível | Exemplos | Aviso ao especialista | Sobe ao gestor |
 |---|---|---|---|
@@ -95,7 +95,7 @@ Prazos de "sem resposta" por nível de urgência (aprovados; ficam na tabela de 
 | Médio | dúvida, solicitação, crítica | 20 min | 31 min |
 | Baixo | elogio, feedback | 60 min | 90 min |
 
-- **Toda interação do cliente exige resposta**, exceto cumprimento, agradecimento e encerramento ("obrigado", "valeu", "ok"), que não iniciam o relógio. O que muda entre as outras é a velocidade (o nível).
+- **Toda interação do cliente exige resposta**, exceto cumprimento, agradecimento e encerramento ("obrigado", "valeu", "ok"), que não iniciam o relógio (regra **aprovada pela Julia**). O que muda entre as outras é a velocidade (o nível).
 - **O que conta como mensagem** (time e cliente): só `Conversation`, `ExtendedTextMessage` e `AudioMessage`. `ReactionMessage`, `StickerMessage`, `ImageMessage`, `DocumentMessage` e vídeo são ignorados. A confirmar: mídia com legenda conta como texto.
 - Uma mensagem do time zera "sem resposta" e "sem contato" na hora.
 - Tempo corrido, 24h por dia. **Parametrizar** para poder virar horário comercial (ex.: 8h–20h, seg–sáb) sem reescrever; a Ju decide antes de ligar para valer.
@@ -111,11 +111,13 @@ Prazos de "sem resposta" por nível de urgência (aprovados; ficam na tabela de 
 4. O critério inicial é o julgamento da IA. Ajustar depois com os dados do piloto (prompt versionado em `prompts/`).
 5. Prazos relativos ditos nas mensagens ("amanhã de noite", "até sexta") são resolvidos a partir do horário da mensagem em `America/Sao_Paulo`, não do horário em que a IA roda.
 
-## "Resolvi por fora"
+## "Registrar ação feita" (antigo "Resolvi por fora")
 
-1. No alerta, o especialista escolhe: ligação, privado ou reunião.
+Na tela, o fluxo se chama **"Registrar ação feita"**, a seção é **"Ações feitas por fora"** e a lista principal é **"Precisam de ação"**. O especialista age primeiro (liga, chama no privado, faz reunião) e registra depois; a janela de 3 horas é a confirmação. Os nomes técnicos não mudam: `marcacoes`, `pode_marcar`, `resolvidos_por_fora`, `voltou_de_marcacao`.
+
+1. No alerta, o especialista registra como agiu: ligação, privado ou reunião.
 2. Grava cliente, quem marcou, como, data e hora.
-3. O alerta sai de "Agir agora" e vai para "Resolvidos por fora", com o horário em que volta.
+3. O alerta sai de "Precisam de ação" e vai para "Ações feitas por fora", com o horário em que volta.
 4. Mensagem do time no grupo dentro de 3 horas: marcação encerrada.
 5. 3 horas sem mensagem do time: o alerta volta em nível gestor, com "marcado à mão, sem registro no grupo".
 6. Quem marcou pode desfazer. Tudo fica no histórico.

@@ -1,6 +1,8 @@
 # Radar CS — contrato da API do painel
 
-O painel (`frontend/index.html`) é uma página única que só desenha o que a API devolve. Ele não calcula alerta nenhum quando está ligado ao backend: as regras (20/31 min, 1/2 dias, retorno vencido, 3 h do "Resolvi por fora") rodam no servidor, no motor do passo 4 do `CLAUDE.md`.
+O painel (`frontend/index.html`) é uma página única que só desenha o que a API devolve. Ele não calcula alerta nenhum quando está ligado ao backend: as regras (20/31 min, 1/2 dias, retorno vencido, 3 h da ação feita por fora) rodam no servidor, no motor do passo 4 do `CLAUDE.md`.
+
+**Sobre os nomes:** na tela, o fluxo se chama "Registrar ação feita" (o especialista age primeiro e registra depois, com uma janela de confirmação), e a seção, "Ações feitas por fora". Os nomes técnicos deste contrato (`marcacoes`, `pode_marcar`, `resolvidos_por_fora`, `voltou_de_marcacao`) continuam os mesmos e não mudam.
 
 Sem configuração, o painel abre em **modo demonstração**, com clientes fictícios e um motor de regras de brinquedo dentro da própria página. O formato dos dados da demonstração é exatamente o desta API, então trocar demo por backend não muda nada na tela.
 
@@ -61,6 +63,16 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
       "voltou_de_marcacao": null
     }
   ],
+  "pendentes": [
+    {
+      "id_grupo": "120363040001000@g.us",
+      "cliente": "Padaria Estrela do Sul",
+      "especialista": "Camila Duarte",
+      "quantidade": 4,
+      "mais_antiga_desde": "2026-10-20T13:40:00-03:00",
+      "estado": "gestor"
+    }
+  ],
   "resolvidos_por_fora": [
     {
       "id_grupo": "120363040001006@g.us",
@@ -101,7 +113,7 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 
 | Campo | Valores / regra |
 |---|---|
-| `usuario.pode_marcar` | `true` mostra o botão "Resolvi por fora". Só especialistas e gestores. |
+| `usuario.pode_marcar` | `true` mostra o botão "Registrar ação feita". Só especialistas e gestores. |
 | `observador.status` | `conectado`, `conectando` ou `desconectado` (vem de `GET /instance/status` da uazapi). Qualquer valor diferente de `conectado` faz o painel mostrar a faixa vermelha de aviso e **nunca** "Tudo em dia". |
 | `observador.desde` | Quando o status atual começou (usado na faixa de aviso). |
 | `alertas[].nivel` | `aviso` (especialista) ou `gestor`. Se `voltou_de_marcacao` não for nulo, é sempre `gestor`. |
@@ -111,6 +123,10 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 | `motivos[].aviso_em` | Hora em que passou a limite de aviso (20 min / 1 dia). `null` em `retorno_vencido`. |
 | `motivos[].gestor_em` | Hora em que sobe ao gestor (31 min / 2 dias / o próprio prazo). O painel usa `aviso_em`, `desde` e `gestor_em` para desenhar a barra "sobe ao gestor em …". |
 | `motivos[].promessa` | Só em `retorno_vencido`: resumo da promessa (até 10 palavras, vem da IA). |
+| `pendentes[]` | Ranking da "Pilha de mensagens": clientes com mensagens esperando resposta. Só grupos `ativo = sim`, com `quantidade >= 1`. **Já vem ordenado**: mais mensagens primeiro; em empate, a mais antiga primeiro. O painel mostra os 8 primeiros (5 no modo TV) e não reordena. Campo opcional: se faltar, o painel mostra "Nenhuma mensagem de cliente esperando resposta". |
+| `pendentes[].quantidade` | Mensagens do cliente que exigem resposta (texto ou áudio, depois do filtro do classificador) enviadas **depois da última mensagem do time**. Não conta cumprimento, agradecimento nem encerramento. |
+| `pendentes[].mais_antiga_desde` | Hora da mais antiga dessas mensagens. O painel mostra "há X" a partir dela. |
+| `pendentes[].estado` | Mesmo valor de `por_especialista[].clientes[].estado`: `ok`, `aviso`, `gestor` ou `resolvido_por_fora`. Define a cor da pilha. Não carrega texto de mensagem. |
 | `voltou_de_marcacao` | `{ como, marcado_por, marcado_em }` quando uma marcação à mão passou de 3 h sem mensagem do time no grupo. |
 | `como` | `ligacao`, `privado` ou `reuniao`. |
 | `por_especialista[].clientes[].estado` | `ok`, `aviso`, `gestor` ou `resolvido_por_fora`. Uma entrada por grupo ativo. |
@@ -123,6 +139,7 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 | `cliente`, `especialista`, `gestor`, `id_grupo` | `grupos` |
 | `motivos` (`sem_resposta`, `sem_contato`) | `mensagens` (última do cliente, última do time) |
 | `retorno_vencido`, `retornos` | `promessas` |
+| `pendentes` | `mensagens` (as do cliente depois da última do time, com `exige_resposta`) |
 | `resolvidos_por_fora`, `voltou_de_marcacao` | `marcacoes` |
 | `observador` | `sync_estado` |
 
