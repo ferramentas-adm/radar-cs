@@ -53,15 +53,17 @@ Docs: https://docs.uazapi.com — índice para IA em `/llms.txt` e `/llms-full.t
 - IDs (`id`, `messageid`, JIDs) são strings opacas. Não remover sufixos (`@g.us`, `@s.whatsapp.net`, `@lid`).
 
 **Descoberto com payloads reais (passo 1, detalhes em `docs/descoberta-uazapi.md`):**
-- `sender` em grupo chega como `@lid`. O número real vem em `sender_pn` (`...@s.whatsapp.net`) e o LID também em `sender_lid`. Na amostra (10 mensagens), todas traziam os três campos. A tabela `time` guarda os dois identificadores.
+- `sender` em grupo chega como `@lid`. O número real vem em `sender_pn` (14 de 14 eventos, sempre `...@s.whatsapp.net`) e o LID também em `sender_lid`. A tabela `time` guarda os dois identificadores.
 - `messageType` observados: `Conversation`, `ExtendedTextMessage`, `AudioMessage`, `ImageMessage`, `DocumentMessage`, `StickerMessage`, `ReactionMessage`.
 - `fromMe` vem `true` nas mensagens do próprio observador.
 - Campos úteis: `groupName`, `chatid`, `chatlid`, `messageid`, `senderName`, `messageTimestamp`, `mediaType`, `quoted`.
+- Legenda de foto chega em `content.caption` e é copiada para `message.text`. Numa `ImageMessage`, `text` com mais de 0 caracteres significa "foto com legenda".
+- `quoted` é o `messageid` da mensagem citada (confirmado: aponta para eventos que já temos). Resposta = `ExtendedTextMessage` com `quoted` preenchido.
+- Áudio, figurinha e documento chegam com `text` vazio. O áudio vem sem transcrição: nós transcrevemos.
+- Reação traz o emoji em `text`; o `messageType` `ReactionMessage` é o que a separa de texto.
 
 **Ainda não sabemos:**
-- Se `sender_pn` vem sempre (se faltar, identificar pelo `sender_lid`).
-- Como `quoted` aparece preenchido numa resposta citada.
-- Em qual campo chega a legenda de foto e de documento.
+- Em qual campo chega a legenda de documento (provavelmente `content.caption` e `text`, como na foto).
 
 ## Modelo de dados (Supabase)
 
@@ -96,7 +98,7 @@ Prazos de "sem resposta" por nível de urgência (**aprovados pela Julia**; fica
 | Baixo | elogio, feedback | 60 min | 90 min |
 
 - **Toda interação do cliente exige resposta**, exceto cumprimento, agradecimento e encerramento ("obrigado", "valeu", "ok"), que não iniciam o relógio (regra **aprovada pela Julia**). O que muda entre as outras é a velocidade (o nível).
-- **O que conta como mensagem** (time e cliente): só `Conversation`, `ExtendedTextMessage` e `AudioMessage`. `ReactionMessage`, `StickerMessage`, `ImageMessage`, `DocumentMessage` e vídeo são ignorados. A confirmar: mídia com legenda conta como texto.
+- **O que conta como mensagem** (time e cliente): só `Conversation`, `ExtendedTextMessage`, `AudioMessage` e foto com legenda (`ImageMessage` com `text` não vazio), que conta como mensagem de texto, para o cliente e para o time. `ReactionMessage`, `StickerMessage`, foto sem legenda, `DocumentMessage` e vídeo são ignorados. A confirmar: legenda de documento.
 - Uma mensagem do time zera "sem resposta" e "sem contato" na hora.
 - Tempo corrido, 24h por dia. **Parametrizar** para poder virar horário comercial (ex.: 8h–20h, seg–sáb) sem reescrever; a Ju decide antes de ligar para valer.
 - Reação com emoji, figurinha ou "ok" do time **não** zera "sem resposta". Precisa ser texto ou áudio.
@@ -202,7 +204,7 @@ Cada passo termina com testes passando e algo que dá para ver funcionando.
 - Tempo corrido ou horário comercial? (Ju decide; começar corrido, parametrizado.)
 - Promessa cumprida por qualquer mensagem do time ou só a que trata do assunto? (Começar com qualquer uma.)
 - Grupo novo que nunca teve mensagem do time: "sem contato" conta desde quando? Sugestão: desde a entrada do observador no grupo. Confirmar com a Ju.
-- Mídia com legenda (foto, documento) conta como texto? Em qual campo chega a legenda?
+- Documento com legenda: em qual campo chega a legenda? (Foto com legenda já está decidida: conta como texto.)
 - Várias mensagens do cliente pendentes com níveis diferentes: qual relógio vale? Sugestão: cada uma corre no seu prazo e o alerta mostra o mais grave. Confirmar com a Ju.
 
 ## Operação durante o piloto (máquina local)

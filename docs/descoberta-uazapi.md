@@ -2,16 +2,15 @@
 
 Payloads reais do evento `messages` capturados em `eventos_brutos` com o observador no grupo interno de teste. Registrado em 21/10/2026.
 
-Amostra: 10 mensagens de grupo.
+Amostra: começou com 10 mensagens de grupo; a segunda rodada de `npm run descoberta:resumo` teve 14 eventos `messages`, todos de grupo. Texto mascarado pelo receptor (`[texto omitido: N caracteres]`), então as conclusões sobre texto vêm do tamanho (`N`) e das chaves, nunca do conteúdo.
 
 ## Quem enviou: `sender` é LID
 
 - `sender` chega como `@lid` nos grupos, não como número.
-- O número real vem em `sender_pn` (`...@s.whatsapp.net`).
-- Há também `sender_lid` (o mesmo `@lid`).
-- Na amostra, as 10 mensagens traziam os três campos (`sender`, `sender_pn`, `sender_lid`).
+- O número real vem em `sender_pn`: veio em 14 de 14 eventos, sempre `...@s.whatsapp.net`.
+- Há também `sender_lid` (o mesmo `@lid`), em 14 de 14.
 
-Consequência: a tabela `time` guarda `numero` (o `sender_pn`) e `lid` (o `sender_lid`). O normalizador identifica o autor pelo número quando houver e cai para o LID quando não houver. Os identificadores são strings opacas: guardar com o sufixo (`@s.whatsapp.net`, `@lid`).
+Consequência: a tabela `time` guarda `numero` (o `sender_pn`) e `lid` (o `sender_lid`). O normalizador identifica o autor pelo número e, se algum dia `sender_pn` faltar, cai para o LID. Os identificadores são strings opacas: guardar com o sufixo (`@s.whatsapp.net`, `@lid`).
 
 ## `messageType` observados
 
@@ -27,22 +26,25 @@ Consequência: a tabela `time` guarda `numero` (o `sender_pn`) e `lid` (o `sende
 
 Vídeo não apareceu na amostra (o nome esperado é `VideoMessage`; confirmar quando aparecer).
 
-## Outros fatos
+## Onde fica cada coisa
 
+- **`text` e `content`.** Em `Conversation`, `content` é string (o próprio texto). Nos outros tipos, `content` é objeto com os dados da mídia ou da extensão (`contextInfo`, `URL`, `mimetype` etc.).
+- **Legenda de foto:** chega em `content.caption` e é copiada para `message.text`. Numa `ImageMessage`, `text` com mais de 0 caracteres significa "foto com legenda"; foto sem legenda vem com `text` vazio.
+- **Resposta citada:** `quoted` é o `messageid` da mensagem citada (confirmado: os `quoted` preenchidos apontam para eventos que já temos). Resposta = `ExtendedTextMessage` com `quoted` preenchido. Nos outros tipos `quoted` veio vazio.
+- **Áudio, figurinha e documento** chegam com `text` vazio. O áudio vem sem transcrição: a transcrição é nossa (`/message/download` com `transcribe: true`).
+- **Reação** traz o emoji em `text` (e em `content.text`; o alvo fica em `content.key`). Quem a separa de texto é o `messageType` `ReactionMessage`, não o `text`.
 - `fromMe` vem `true` nas mensagens enviadas pelo próprio observador. Serve como segunda proteção para nunca contar o observador como time.
 
 ## Campos úteis do evento
 
-`groupName`, `chatid`, `chatlid`, `messageid`, `senderName`, `messageTimestamp` (milissegundos), `mediaType`, `quoted`.
+`groupName`, `chatid`, `chatlid`, `messageid`, `senderName`, `sender_pn`, `sender_lid`, `messageTimestamp` (milissegundos), `mediaType`, `quoted`, `text`, `content.caption`.
 
 ## Regra de contagem que sai daqui
 
-- **Contam:** `Conversation`, `ExtendedTextMessage`, `AudioMessage`.
-- **Ignorados:** `ReactionMessage`, `StickerMessage`, `ImageMessage`, `DocumentMessage` e vídeo.
-- A confirmar: mídia com legenda (foto ou documento com texto) conta como texto.
+- **Contam:** `Conversation`, `ExtendedTextMessage`, `AudioMessage` e **foto com legenda** (`ImageMessage` com `text` não vazio), que vale como mensagem de texto, para o cliente e para o time.
+- **Ignorados:** `ReactionMessage`, `StickerMessage`, foto sem legenda, `DocumentMessage` e vídeo.
+- A confirmar: legenda de documento (o único documento da amostra não tinha legenda).
 
 ## Pendente
 
-- Confirmar se `sender_pn` vem sempre (a amostra é pequena; se faltar, o autor é resolvido pelo `sender_lid`).
-- Ver como `quoted` aparece preenchido numa resposta citada.
-- Descobrir em qual campo chega a legenda de foto e de documento.
+- Mandar no grupo de teste um documento com legenda e ver se a legenda chega em `content.caption` e em `text`, como na foto.
