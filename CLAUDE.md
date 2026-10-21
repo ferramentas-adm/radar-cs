@@ -10,7 +10,7 @@ Documentos de referência (copiar para `docs/` antes de começar):
 - `docs/Radar CS.md` — texto do primeiro protótipo
 - `docs/api-contract.md` — contrato da API que o painel lê (`GET /api/radar`, marcações). **O backend implementa este contrato; não mudar o formato sem mudar o painel.**
 - `frontend/index.html` — painel pronto, página única. Sem configuração abre em modo demonstração (clientes fictícios, tempo simulado). Com `window.RADAR_CONFIG = { modo: 'api', apiBase: '/api' }` lê a API real. Modo TV: `#tv` ou tecla T.
-- `frontend/tests/engine-demo.test.mjs` — 30 casos de limite das regras (19/20/31 min, 23h59/24h/48h, 2h59/3h, retorno vencido, pilha de mensagens pendentes). O motor real do passo 4 deve passar nos mesmos casos (os 20/31 min equivalem ao nível de urgência médio).
+- `frontend/tests/engine-demo.test.mjs` — 30 casos de limite das regras (19/20/31 min, 23h59/24h/48h, 2h59/3h, retorno vencido, pilha de mensagens pendentes). O motor real do passo 4 deve passar nos mesmos casos, dentro do expediente (os 20/31 min equivalem ao nível de urgência médio).
 - `docs/descoberta-uazapi.md` — o que os payloads reais do passo 1 mostraram (sender LID, `messageType`, campos úteis, pendências).
 
 Se este arquivo e a especificação divergirem, vale este arquivo (ele já incorpora a decisão pela uazapi). Dúvida de regra de negócio: perguntar à Ju antes de decidir.
@@ -66,10 +66,12 @@ Docs: https://docs.uazapi.com — índice para IA em `/llms.txt` e `/llms-full.t
 
 Nomes como na especificação.
 
-- `grupos`: `id_grupo` (pk), `cliente`, `especialista`, `gestor`, `ativo` (bool). Preenchida pelo CS.
+- `grupos`: `id_grupo` (pk), `cliente`, `especialista`, `gestor`, `ativo` (bool), `observador_entrou_em` (timestamptz; início do "sem contato" de grupo que nunca teve mensagem do time). Preenchida pelo CS.
 - `time`: `numero` (`sender_pn`), `lid` (`sender_lid`), `nome`. Quem não está nela é cliente.
 - `mensagens`: `id_mensagem` (unique, = `messageid`), `id_grupo`, `autor_numero`, `autor_tipo` (`time`|`cliente`), `tipo` (texto, audio, reacao, figurinha, outro), `texto` (áudio: só a marca), `enviada_em`. Índice em `(id_grupo, enviada_em desc)`. Mensagens do cliente ganham a classificação da IA: `categoria`, `urgencia` (`alto`|`medio`|`baixo`), `exige_resposta` (bool).
-- `prazos_urgencia`: tabela de configuração com os prazos de "sem resposta" por nível (`urgencia`, `aviso_min`, `gestor_min`). Mudar prazo é mudar linha, não código.
+- `prazos_urgencia`: tabela de configuração com os prazos de "sem resposta" por nível (`urgencia`, `aviso_min`, `gestor_min`). Mudar prazo é mudar linha, não código. Só administrador edita.
+- `config_expediente`: uma linha só, com `hora_inicio`, `hora_fim`, `dias_uteis` e `fuso` (hoje 9h, 19h, seg–sex, `America/Sao_Paulo`). Nada de expediente fixo no código. Só administrador edita.
+- Papel de administrador por usuário (ex.: `usuarios.papel` = `admin`|`comum`). As tabelas de configuração só aceitam escrita de administrador, garantido por RLS **e** pela API (o painel passa pela API, então a checagem de papel na API é obrigatória; esconder na tela não basta).
 - `promessas`: `id`, `id_grupo`, `especialista`, `promessa`, `prazo`, `criada_em`, `status` (`aberta`|`cumprida`), `id_mensagem_origem`.
 - `marcacoes`: histórico de "Resolvi por fora" (nunca apagar): `id`, `id_grupo`, `marcado_por`, `como` (`ligacao`|`privado`|`reuniao`), `marcado_em`, `encerrada_em`, `encerrada_por` (`mensagem_no_grupo`|`desfeita`|`expirou`).
 - `eventos_brutos`: payloads (sem o `token`) só durante a fase de descoberta. Remover depois.
@@ -83,7 +85,7 @@ RLS ligado em tudo. O backend usa a service role; o painel nunca fala direto com
 | Situação | Como medir | Aviso ao especialista | Sobe ao gestor |
 |---|---|---|---|
 | Sem resposta | mensagem do cliente que exige resposta, sem mensagem do time depois; tempo desde ela | conforme o nível (tabela abaixo) | conforme o nível |
-| Sem contato | tempo desde a última mensagem do time | 1 dia | 2 dias |
+| Sem contato | tempo desde a última mensagem do time (grupo que nunca teve: desde `observador_entrou_em`) | 1 dia | 2 dias |
 | Retorno vencido | promessa aberta passou do prazo | não tem | assim que vence |
 
 Prazos de "sem resposta" por nível de urgência (**aprovados pela Julia**; ficam na tabela de configuração `prazos_urgencia`):
@@ -96,8 +98,16 @@ Prazos de "sem resposta" por nível de urgência (**aprovados pela Julia**; fica
 
 - **Toda interação do cliente exige resposta**, exceto cumprimento, agradecimento e encerramento ("obrigado", "valeu", "ok"), que não iniciam o relógio (regra **aprovada pela Julia**). O que muda entre as outras é a velocidade (o nível).
 - **O que conta como mensagem** (time e cliente): só `Conversation`, `ExtendedTextMessage`, `AudioMessage` e foto ou documento com legenda (`ImageMessage` ou `DocumentMessage` com `text` não vazio), que contam como mensagem de texto, para o cliente e para o time. `ReactionMessage`, `StickerMessage`, foto ou documento sem legenda e vídeo são ignorados.
-- Uma mensagem do time zera "sem resposta" e "sem contato" na hora.
-- Tempo corrido, 24h por dia. **Parametrizar** para poder virar horário comercial (ex.: 8h–20h, seg–sáb) sem reescrever; a Ju decide antes de ligar para valer.
+- Uma mensagem do time zera "sem resposta" e "sem contato" na hora, e zera **todas** as mensagens do cliente pendentes até aquele momento. (Assumido, como está hoje; a Julia não respondeu. Confirmar com a Ju.)
+- **Várias mensagens do cliente pendentes com níveis diferentes** (decidido pela Julia, 21/10/2026): cada uma corre no seu próprio prazo e o alerta mostra a mais grave.
+- **Grupo novo** (decidido pela Julia, 21/10/2026): o "sem contato" conta a partir da entrada do observador no grupo (`grupos.observador_entrou_em`).
+
+### Expediente (decidido pela Julia, 21/10/2026)
+
+- O relógio só corre **em horário de expediente: 9h às 19h, segunda a sexta, `America/Sao_Paulo`**. Fora do expediente o relógio para e continua de onde parou quando o expediente volta.
+- Exemplos: mensagem do cliente na sexta às 18h40 conta 20 min na sexta (até 19h), para e retoma na segunda às 9h. Mensagem às 20h de segunda começa a contar na terça às 9h.
+- O expediente vem de `config_expediente` (hora de início, hora de fim, dias úteis, fuso), nunca fixo no código. O motor recebe essa configuração como entrada, como recebe `agora`.
+- Só administradores editam o expediente e os prazos por urgência, numa tela de configurações do painel (passo 10). Usuários comuns não veem a tela nem conseguem alterar: papel de administrador + RLS + checagem na API.
 - Reação com emoji, figurinha ou "ok" do time **não** zera "sem resposta". Precisa ser texto ou áudio.
 - Áudio do time conta como resposta (é exceção rara; o padrão é texto).
 - Grupos com `ativo = não` saem do radar.
@@ -172,15 +182,26 @@ Cada passo termina com testes passando e algo que dá para ver funcionando.
 
 3b. **Classificador** das mensagens do cliente (IA + transcrição de áudio do cliente; ver "Classificação das mensagens do cliente"). Vem antes do motor, que depende do nível de urgência. Numerado 3b para não mudar as referências a "passo 4" etc. em outros arquivos.
 
-4. **Motor de regras como função pura** (recebe mensagens, grupos, marcações, promessas, `agora`; devolve alertas) + agendador de 1 minuto.
+4. **Motor de regras como função pura** (recebe mensagens, grupos, marcações, promessas, configuração de expediente e de prazos, `agora`; devolve alertas) + agendador de 1 minuto.
 5. **Reconciliação e saúde.** Ao subir e a cada poucos minutos, buscar via `/message/find` o que faltou desde a última mensagem recebida. Monitorar `/instance/status`: se a sessão cair, avisar o gestor (um painel que parece "tudo em dia" com o observador desconectado é pior que nenhum painel).
 6. **Resolvi por fora.**
 7. **IA dos retornos.**
 8. **`GET /api/radar` conforme `docs/api-contract.md`** (monta a resposta a partir do motor, das marcações, das promessas e do estado do observador), servir o `frontend/index.html` com `RADAR_CONFIG`, avisos e resumo das 18h. Conferir o painel contra a API com dados reais, incluindo a faixa vermelha quando o observador cai.
 9. **Deploy na Hostinger** e troca do túnel pela URL definitiva do webhook.
+10. **Tela de configurações (só administrador).** Editar `config_expediente` e `prazos_urgencia` pelo painel. Papel de administrador, RLS e checagem na API; usuário comum não vê a tela nem consegue gravar. Até lá, a configuração muda por migration.
 
 ## Casos de teste do motor (mínimo)
 
+Os casos de limite (19/20/31 min, 23h59/24h/48h etc.) valem **dentro do expediente**: as mensagens do teste caem num dia útil, longe das 9h e das 19h.
+
+- Fim de expediente: mensagem do cliente às 18h50 (médio) → 10 min corridos até 19h; nada às 19h30; aviso às 9h10 do dia útil seguinte.
+- Fim de semana: mensagem na sexta às 18h40 → 20 min na sexta; nada no sábado nem no domingo; retoma na segunda às 9h.
+- Retomada na manhã seguinte: mensagem às 20h de segunda → começa a contar na terça às 9h (aviso às 9h20 no médio).
+- Mensagem do time fora do expediente zera as pendentes do mesmo jeito.
+- Várias pendentes com níveis diferentes: cada uma no seu prazo; o alerta mostra a mais grave.
+- Mensagem do time zera todas as pendentes até aquele momento.
+- Grupo novo sem mensagem do time: "sem contato" conta desde `observador_entrou_em`.
+- Expediente lido da configuração: mudar `config_expediente` muda o resultado sem mudar código.
 - Mensagem do cliente nível médio: 19 min → nada; 20 min → aviso; 31 min → gestor.
 - Nível alto: 9 min → nada; 10 min → aviso; 15 min → gestor. Nível baixo: 59 min → nada; 60 min → aviso; 90 min → gestor.
 - Cumprimento, agradecimento ou encerramento do cliente ("obrigado", "valeu", "ok") não inicia o relógio.
@@ -198,10 +219,11 @@ Cada passo termina com testes passando e algo que dá para ver funcionando.
 
 ## Perguntas em aberto
 
-- Tempo corrido ou horário comercial? (Ju decide; começar corrido, parametrizado.)
 - Promessa cumprida por qualquer mensagem do time ou só a que trata do assunto? (Começar com qualquer uma.)
-- Grupo novo que nunca teve mensagem do time: "sem contato" conta desde quando? Sugestão: desde a entrada do observador no grupo. Confirmar com a Ju.
-- Várias mensagens do cliente pendentes com níveis diferentes: qual relógio vale? Sugestão: cada uma corre no seu prazo e o alerta mostra o mais grave. Confirmar com a Ju.
+- Mensagem do time zera todas as pendentes até aquele momento? (Assumido que sim, como está hoje; a Julia não respondeu. Confirmar com a Ju.)
+- Feriados: o relógio também para em feriados? Sugestão: sim, com lista de feriados editável pelo administrador.
+- "Sem contato" de 1 dia e 2 dias: contar em dias úteis? Sugestão: sim; sexta às 18h sem contato não pode virar alerta no sábado.
+- A janela de 3 horas da "ação feita por fora" e o prazo de retorno prometido ("até amanhã de noite") contam em tempo corrido ou em tempo de expediente? Sugestão: a janela de 3 horas em tempo de expediente; a promessa pelo horário combinado com o cliente.
 
 ## Operação durante o piloto (máquina local)
 
