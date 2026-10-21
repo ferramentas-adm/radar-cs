@@ -19,6 +19,14 @@ Se este arquivo e a especificação divergirem, vale este arquivo (ele já incor
 
 - **WhatsApp:** uazapi (plano com 100 instâncias). Substitui "Evolution ou Z-API" da especificação.
 - **Número observador:** chip já aquecido, WhatsApp comum (não Business), perfil "Grupo Silva | Qualidade". Já foi usado em atendimento, parado há semanas. Só lê. Nunca envia, nunca é admin, ninguém conversa por ele.
+- **Fonte das mensagens (a testar):** além do observador, conectar os números corporativos dos especialistas e gerentes, uma instância da uazapi por número, para não precisar adicionar o observador a mais de mil grupos. Cuidados:
+  - alerta de "número desconectado" **por pessoa**, para não confundir ponto cego com "ninguém falou";
+  - deduplicação pelo `messageid` (o mesmo grupo é visto por mais de um número);
+  - guardar só os grupos cadastrados em `grupos`;
+  - a regra de só leitura vale para toda instância conectada: o sistema nunca envia por nenhum número;
+  - numa instância de especialista, `fromMe = true` é mensagem do próprio especialista (conta como time); só no observador `fromMe` indica o observador.
+- **Só conversa de grupo com cliente cadastrado** é guardada e analisada. Descartar na chegada, sem gravar: grupo interno, conversa particular com internos e conversa particular com clientes. Grupo que não está em `grupos` é descartado. O número de quem enviou identifica o time (tabela `time`).
+- **"Registrar ação feita" continua manual** (ligação, privado, reunião). O sistema não registra ação sozinho a partir de conversa particular.
 - **Banco:** Supabase (Postgres).
 - **Backend:** um serviço Node.js + TypeScript com três partes: receptor do webhook, motor de regras (a cada minuto) e job da IA (a cada hora).
 - **IA (classificação das mensagens do cliente e retornos prometidos):** API da Anthropic, modelo Claude Haiku (`claude-haiku-5-5`; confirmar a string atual em https://docs.claude.com).
@@ -71,6 +79,7 @@ Nomes como na especificação.
 - `mensagens`: `id_mensagem` (unique, = `messageid`), `id_grupo`, `autor_numero`, `autor_tipo` (`time`|`cliente`), `tipo` (texto, audio, reacao, figurinha, outro), `texto` (áudio: só a marca), `enviada_em`. Índice em `(id_grupo, enviada_em desc)`. Mensagens do cliente ganham a classificação da IA: `categoria`, `urgencia` (`alto`|`medio`|`baixo`), `exige_resposta` (bool).
 - `prazos_urgencia`: tabela de configuração com os prazos de "sem resposta" por nível (`urgencia`, `aviso_min`, `gestor_min`). Mudar prazo é mudar linha, não código. Só administrador edita.
 - `config_expediente`: uma linha só, com `hora_inicio`, `hora_fim`, `dias_uteis` e `fuso` (hoje 9h, 19h, seg–sex, `America/Sao_Paulo`). Nada de expediente fixo no código. Só administrador edita.
+- `feriados`: `data`, `descricao`. O relógio para nesses dias. Só administrador edita.
 - Papel de administrador por usuário (ex.: `usuarios.papel` = `admin`|`comum`). As tabelas de configuração só aceitam escrita de administrador, garantido por RLS **e** pela API (o painel passa pela API, então a checagem de papel na API é obrigatória; esconder na tela não basta).
 - `promessas`: `id`, `id_grupo`, `especialista`, `promessa`, `prazo`, `criada_em`, `status` (`aberta`|`cumprida`), `id_mensagem_origem`.
 - `marcacoes`: histórico de "Resolvi por fora" (nunca apagar): `id`, `id_grupo`, `marcado_por`, `como` (`ligacao`|`privado`|`reuniao`), `marcado_em`, `encerrada_em`, `encerrada_por` (`mensagem_no_grupo`|`desfeita`|`expirou`).
@@ -101,16 +110,20 @@ Prazos de "sem resposta" por nível de urgência (**aprovados pela Julia**; fica
 - Uma mensagem do time zera "sem resposta" e "sem contato" na hora, e zera **todas** as mensagens do cliente pendentes até aquele momento. (Assumido, como está hoje; a Julia não respondeu. Confirmar com a Ju.)
 - **Várias mensagens do cliente pendentes com níveis diferentes** (decidido pela Julia, 21/10/2026): cada uma corre no seu próprio prazo e o alerta mostra a mais grave.
 - **Grupo novo** (decidido pela Julia, 21/10/2026): o "sem contato" conta a partir da entrada do observador no grupo (`grupos.observador_entrou_em`).
+- Reação com emoji, figurinha ou "ok" do time **não** zera "sem resposta". Precisa ser texto ou áudio.
+- Áudio do time conta como resposta (é exceção rara; o padrão é texto).
+- Grupos com `ativo = não` saem do radar.
 
 ### Expediente (decidido pela Julia, 21/10/2026)
 
 - O relógio só corre **em horário de expediente: 9h às 19h, segunda a sexta, `America/Sao_Paulo`**. Fora do expediente o relógio para e continua de onde parou quando o expediente volta.
 - Exemplos: mensagem do cliente na sexta às 18h40 conta 20 min na sexta (até 19h), para e retoma na segunda às 9h. Mensagem às 20h de segunda começa a contar na terça às 9h.
-- O expediente vem de `config_expediente` (hora de início, hora de fim, dias úteis, fuso), nunca fixo no código. O motor recebe essa configuração como entrada, como recebe `agora`.
-- Só administradores editam o expediente e os prazos por urgência, numa tela de configurações do painel (passo 10). Usuários comuns não veem a tela nem conseguem alterar: papel de administrador + RLS + checagem na API.
-- Reação com emoji, figurinha ou "ok" do time **não** zera "sem resposta". Precisa ser texto ou áudio.
-- Áudio do time conta como resposta (é exceção rara; o padrão é texto).
-- Grupos com `ativo = não` saem do radar.
+- **Feriados:** o relógio para em feriados, igual a fim de semana. Os feriados vêm da tabela `feriados` (data e descrição).
+- **"Sem contato" em dias úteis:** 1 dia (aviso) e 2 dias (gestor) contam em dias úteis, dentro do expediente configurado e sem feriados. Exemplo: o time escreve na sexta às 17h; o aviso sai na segunda às 17h e o gestor é chamado na terça às 17h.
+- **Janela de 3 horas do "Registrar ação feita":** conta só em tempo de expediente. Exemplo: registro na sexta às 18h30 (expediente até 19h) volta na segunda às 11h30.
+- **Retorno prometido:** o prazo segue o horário combinado com o cliente (não é tempo de expediente).
+- O expediente vem de `config_expediente` (hora de início, hora de fim, dias úteis, fuso) e de `feriados`, nunca fixo no código. O motor recebe essa configuração como entrada, como recebe `agora`.
+- Só administradores editam o expediente, os feriados e os prazos por urgência, numa tela de configurações do painel (passo 10). Usuários comuns não veem a tela nem conseguem alterar: papel de administrador + RLS + checagem na API.
 
 ## Classificação das mensagens do cliente (IA)
 
@@ -177,7 +190,7 @@ Cada passo termina com testes passando e algo que dá para ver funcionando.
 
 0. **Base:** repositório, projeto Supabase, migrations em `supabase/migrations`, `.env.example`, vitest, tipagem estrita.
 1. **Receptor do webhook + captura.** `POST /hooks/whatsapp/<segredo>`: valida, responde 200, grava o payload (sem `token`) em `eventos_brutos`. Teste com o observador num **grupo interno de teste**: texto, áudio, reação, figurinha, resposta citada, de pessoas diferentes. Resultado: resolver as duas dúvidas da seção uazapi.
-2. **Script de grupos.** Lista os grupos da instância e gera um CSV (`id_grupo`, nome) para o CS preencher especialista, gestor e ativo; depois importa em `grupos`. Idem para `time`.
+2. **Script de grupos.** `scripts/exportar-grupos.ts` (`npm run grupos:exportar`) lista os grupos do número conectado via uazapi (`POST /group/list`) e grava `var/grupos.csv` (`id_grupo`, nome), que nunca vai para o Git (`var/` está no `.gitignore`). O CS preenche especialista, gestor e ativo; depois importa em `grupos`. Idem para `time`.
 3. **Normalizador** payload → `mensagens` (autor_tipo, tipo, dedupe por `messageid`, ms → timestamptz).
 
 3b. **Classificador** das mensagens do cliente (IA + transcrição de áudio do cliente; ver "Classificação das mensagens do cliente"). Vem antes do motor, que depende do nível de urgência. Numerado 3b para não mudar as referências a "passo 4" etc. em outros arquivos.
@@ -188,7 +201,7 @@ Cada passo termina com testes passando e algo que dá para ver funcionando.
 7. **IA dos retornos.**
 8. **`GET /api/radar` conforme `docs/api-contract.md`** (monta a resposta a partir do motor, das marcações, das promessas e do estado do observador), servir o `frontend/index.html` com `RADAR_CONFIG`, avisos e resumo das 18h. Conferir o painel contra a API com dados reais, incluindo a faixa vermelha quando o observador cai.
 9. **Deploy na Hostinger** e troca do túnel pela URL definitiva do webhook.
-10. **Tela de configurações (só administrador).** Editar `config_expediente` e `prazos_urgencia` pelo painel. Papel de administrador, RLS e checagem na API; usuário comum não vê a tela nem consegue gravar. Até lá, a configuração muda por migration.
+10. **Tela de configurações (só administrador).** Editar `config_expediente`, `feriados` e `prazos_urgencia` pelo painel. Papel de administrador, RLS e checagem na API; usuário comum não vê a tela nem consegue gravar. Até lá, a configuração muda por migration.
 
 ## Casos de teste do motor (mínimo)
 
@@ -202,6 +215,10 @@ Os casos de limite (19/20/31 min, 23h59/24h/48h etc.) valem **dentro do expedien
 - Mensagem do time zera todas as pendentes até aquele momento.
 - Grupo novo sem mensagem do time: "sem contato" conta desde `observador_entrou_em`.
 - Expediente lido da configuração: mudar `config_expediente` muda o resultado sem mudar código.
+- Feriado num dia útil: o relógio fica parado o dia inteiro, como no fim de semana.
+- Sem contato em dias úteis: time escreve na sexta às 17h → aviso na segunda às 17h; gestor na terça às 17h. Com feriado na segunda, tudo anda um dia útil.
+- Janela de 3 horas em tempo de expediente: registro na sexta às 18h30 → volta na segunda às 11h30.
+- Retorno prometido vence no horário combinado, mesmo fora do expediente.
 - Mensagem do cliente nível médio: 19 min → nada; 20 min → aviso; 31 min → gestor.
 - Nível alto: 9 min → nada; 10 min → aviso; 15 min → gestor. Nível baixo: 59 min → nada; 60 min → aviso; 90 min → gestor.
 - Cumprimento, agradecimento ou encerramento do cliente ("obrigado", "valeu", "ok") não inicia o relógio.
@@ -209,7 +226,7 @@ Os casos de limite (19/20/31 min, 23h59/24h/48h etc.) valem **dentro do expedien
 - Reação, figurinha e foto ou documento sem legenda do cliente não iniciam o relógio.
 - Resposta de texto ou áudio do time zera; reação, figurinha e "ok" não zeram "sem resposta".
 - Mensagem do observador não conta como time.
-- Sem contato: 23h59 → nada; 1 dia → aviso; 2 dias → gestor.
+- Sem contato (dias úteis): 1 dia útil menos 1 min → nada; 1 dia útil → aviso; 2 dias úteis → gestor.
 - Grupo inativo não gera alerta.
 - Marcação à mão: resposta aos 2h59 encerra; 3h sem resposta volta em nível gestor com o aviso; desfazer.
 - Retorno: vence → gestor direto; mensagem do time depois da promessa → cumprida.
@@ -221,9 +238,11 @@ Os casos de limite (19/20/31 min, 23h59/24h/48h etc.) valem **dentro do expedien
 
 - Promessa cumprida por qualquer mensagem do time ou só a que trata do assunto? (Começar com qualquer uma.)
 - Mensagem do time zera todas as pendentes até aquele momento? (Assumido que sim, como está hoje; a Julia não respondeu. Confirmar com a Ju.)
-- Feriados: o relógio também para em feriados? Sugestão: sim, com lista de feriados editável pelo administrador.
-- "Sem contato" de 1 dia e 2 dias: contar em dias úteis? Sugestão: sim; sexta às 18h sem contato não pode virar alerta no sábado.
-- A janela de 3 horas da "ação feita por fora" e o prazo de retorno prometido ("até amanhã de noite") contam em tempo corrido ou em tempo de expediente? Sugestão: a janela de 3 horas em tempo de expediente; a promessa pelo horário combinado com o cliente.
+
+## Antes de ligar para valer
+
+- Avisar os funcionários de que o sistema lê as conversas dos grupos de clientes.
+- O jurídico dá o ok.
 
 ## Operação durante o piloto (máquina local)
 
