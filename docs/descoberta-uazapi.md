@@ -2,7 +2,7 @@
 
 Payloads reais do evento `messages` capturados em `eventos_brutos` com o observador no grupo interno de teste. Registrado em 21/10/2026.
 
-Amostra: começou com 10 mensagens de grupo; a segunda rodada de `npm run descoberta:resumo` teve 14 eventos `messages`, todos de grupo. Texto mascarado pelo receptor (`[texto omitido: N caracteres]`), então as conclusões sobre texto vêm do tamanho (`N`) e das chaves, nunca do conteúdo.
+Amostra: começou com 10 mensagens de grupo; a segunda rodada de `npm run descoberta:resumo` teve 14 eventos `messages`, todos de grupo; a terceira, 15 (mais um documento com legenda). Texto mascarado pelo receptor (`[texto omitido: N caracteres]`), então as conclusões sobre texto vêm do tamanho (`N`) e das chaves, nunca do conteúdo.
 
 ## Quem enviou: `sender` é LID
 
@@ -30,8 +30,9 @@ Vídeo não apareceu na amostra (o nome esperado é `VideoMessage`; confirmar qu
 
 - **`text` e `content`.** Em `Conversation`, `content` é string (o próprio texto). Nos outros tipos, `content` é objeto com os dados da mídia ou da extensão (`contextInfo`, `URL`, `mimetype` etc.).
 - **Legenda de foto:** chega em `content.caption` e é copiada para `message.text`. Numa `ImageMessage`, `text` com mais de 0 caracteres significa "foto com legenda"; foto sem legenda vem com `text` vazio.
+- **Legenda de documento:** igual à da foto, em `content.caption` e copiada para `message.text`. Num `DocumentMessage`, `text` com mais de 0 caracteres significa "documento com legenda"; sem legenda, `text` vem vazio. Confirmado com um documento real no grupo de teste.
 - **Resposta citada:** `quoted` é o `messageid` da mensagem citada (confirmado: os `quoted` preenchidos apontam para eventos que já temos). Resposta = `ExtendedTextMessage` com `quoted` preenchido. Nos outros tipos `quoted` veio vazio.
-- **Áudio, figurinha e documento** chegam com `text` vazio. O áudio vem sem transcrição: a transcrição é nossa (`/message/download` com `transcribe: true`).
+- **Áudio, figurinha e foto ou documento sem legenda** chegam com `text` vazio. O áudio vem sem transcrição: a transcrição é nossa (`/message/download` com `transcribe: true`).
 - **Reação** traz o emoji em `text` (e em `content.text`; o alvo fica em `content.key`). Quem a separa de texto é o `messageType` `ReactionMessage`, não o `text`.
 - `fromMe` vem `true` nas mensagens enviadas pelo próprio observador. Serve como segunda proteção para nunca contar o observador como time.
 
@@ -41,10 +42,5 @@ Vídeo não apareceu na amostra (o nome esperado é `VideoMessage`; confirmar qu
 
 ## Regra de contagem que sai daqui
 
-- **Contam:** `Conversation`, `ExtendedTextMessage`, `AudioMessage` e **foto com legenda** (`ImageMessage` com `text` não vazio), que vale como mensagem de texto, para o cliente e para o time.
-- **Ignorados:** `ReactionMessage`, `StickerMessage`, foto sem legenda, `DocumentMessage` e vídeo.
-- A confirmar: legenda de documento (o único documento da amostra não tinha legenda).
-
-## Pendente
-
-- Mandar no grupo de teste um documento com legenda e ver se a legenda chega em `content.caption` e em `text`, como na foto.
+- **Contam:** `Conversation`, `ExtendedTextMessage`, `AudioMessage` e **foto ou documento com legenda** (`ImageMessage` ou `DocumentMessage` com `text` não vazio), que valem como mensagem de texto, para o cliente e para o time.
+- **Ignorados:** `ReactionMessage`, `StickerMessage`, foto ou documento sem legenda e vídeo.

@@ -57,13 +57,10 @@ Docs: https://docs.uazapi.com — índice para IA em `/llms.txt` e `/llms-full.t
 - `messageType` observados: `Conversation`, `ExtendedTextMessage`, `AudioMessage`, `ImageMessage`, `DocumentMessage`, `StickerMessage`, `ReactionMessage`.
 - `fromMe` vem `true` nas mensagens do próprio observador.
 - Campos úteis: `groupName`, `chatid`, `chatlid`, `messageid`, `senderName`, `messageTimestamp`, `mediaType`, `quoted`.
-- Legenda de foto chega em `content.caption` e é copiada para `message.text`. Numa `ImageMessage`, `text` com mais de 0 caracteres significa "foto com legenda".
+- Legenda de foto e de documento chega em `content.caption` e é copiada para `message.text`. Numa `ImageMessage` ou `DocumentMessage`, `text` com mais de 0 caracteres significa "com legenda"; sem legenda, `text` vem vazio (documento confirmado com um documento real no grupo de teste, 15 eventos no total).
 - `quoted` é o `messageid` da mensagem citada (confirmado: aponta para eventos que já temos). Resposta = `ExtendedTextMessage` com `quoted` preenchido.
-- Áudio, figurinha e documento chegam com `text` vazio. O áudio vem sem transcrição: nós transcrevemos.
+- Áudio, figurinha e foto ou documento sem legenda chegam com `text` vazio. O áudio vem sem transcrição: nós transcrevemos.
 - Reação traz o emoji em `text`; o `messageType` `ReactionMessage` é o que a separa de texto.
-
-**Ainda não sabemos:**
-- Em qual campo chega a legenda de documento (provavelmente `content.caption` e `text`, como na foto).
 
 ## Modelo de dados (Supabase)
 
@@ -98,7 +95,7 @@ Prazos de "sem resposta" por nível de urgência (**aprovados pela Julia**; fica
 | Baixo | elogio, feedback | 60 min | 90 min |
 
 - **Toda interação do cliente exige resposta**, exceto cumprimento, agradecimento e encerramento ("obrigado", "valeu", "ok"), que não iniciam o relógio (regra **aprovada pela Julia**). O que muda entre as outras é a velocidade (o nível).
-- **O que conta como mensagem** (time e cliente): só `Conversation`, `ExtendedTextMessage`, `AudioMessage` e foto com legenda (`ImageMessage` com `text` não vazio), que conta como mensagem de texto, para o cliente e para o time. `ReactionMessage`, `StickerMessage`, foto sem legenda, `DocumentMessage` e vídeo são ignorados. A confirmar: legenda de documento.
+- **O que conta como mensagem** (time e cliente): só `Conversation`, `ExtendedTextMessage`, `AudioMessage` e foto ou documento com legenda (`ImageMessage` ou `DocumentMessage` com `text` não vazio), que contam como mensagem de texto, para o cliente e para o time. `ReactionMessage`, `StickerMessage`, foto ou documento sem legenda e vídeo são ignorados.
 - Uma mensagem do time zera "sem resposta" e "sem contato" na hora.
 - Tempo corrido, 24h por dia. **Parametrizar** para poder virar horário comercial (ex.: 8h–20h, seg–sáb) sem reescrever; a Ju decide antes de ligar para valer.
 - Reação com emoji, figurinha ou "ok" do time **não** zera "sem resposta". Precisa ser texto ou áudio.
@@ -188,7 +185,7 @@ Cada passo termina com testes passando e algo que dá para ver funcionando.
 - Nível alto: 9 min → nada; 10 min → aviso; 15 min → gestor. Nível baixo: 59 min → nada; 60 min → aviso; 90 min → gestor.
 - Cumprimento, agradecimento ou encerramento do cliente ("obrigado", "valeu", "ok") não inicia o relógio.
 - Falha do classificador → tratada como médio.
-- Reação, figurinha, foto e documento do cliente não iniciam o relógio.
+- Reação, figurinha e foto ou documento sem legenda do cliente não iniciam o relógio.
 - Resposta de texto ou áudio do time zera; reação, figurinha e "ok" não zeram "sem resposta".
 - Mensagem do observador não conta como time.
 - Sem contato: 23h59 → nada; 1 dia → aviso; 2 dias → gestor.
@@ -204,7 +201,6 @@ Cada passo termina com testes passando e algo que dá para ver funcionando.
 - Tempo corrido ou horário comercial? (Ju decide; começar corrido, parametrizado.)
 - Promessa cumprida por qualquer mensagem do time ou só a que trata do assunto? (Começar com qualquer uma.)
 - Grupo novo que nunca teve mensagem do time: "sem contato" conta desde quando? Sugestão: desde a entrada do observador no grupo. Confirmar com a Ju.
-- Documento com legenda: em qual campo chega a legenda? (Foto com legenda já está decidida: conta como texto.)
 - Várias mensagens do cliente pendentes com níveis diferentes: qual relógio vale? Sugestão: cada uma corre no seu prazo e o alerta mostra o mais grave. Confirmar com a Ju.
 
 ## Operação durante o piloto (máquina local)
