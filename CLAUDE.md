@@ -2,13 +2,16 @@
 
 Sistema que lê os grupos de WhatsApp dos clientes e alerta sozinho quando um cliente fica **sem resposta**, **sem contato** ou com **retorno prometido vencido**. Hoje isso depende de varredura manual, e a varredura falha (já houve cliente com 9 dias sem contato depois de o time dizer que tinha feito).
 
+**Objetivo:** controlar a qualidade de resposta do time e mapear as promessas que o time faz ao cliente.
+
 Documentos de referência (copiar para `docs/` antes de começar):
 - `docs/especificacao.pdf` — especificação original ("Radar CS: especificação para a Tecnologia")
 - `docs/Radar CS.html` — primeiro protótipo visual (clientes fictícios). Referência histórica; o painel de verdade é o `frontend/index.html`.
 - `docs/Radar CS.md` — texto do primeiro protótipo
 - `docs/api-contract.md` — contrato da API que o painel lê (`GET /api/radar`, marcações). **O backend implementa este contrato; não mudar o formato sem mudar o painel.**
 - `frontend/index.html` — painel pronto, página única. Sem configuração abre em modo demonstração (clientes fictícios, tempo simulado). Com `window.RADAR_CONFIG = { modo: 'api', apiBase: '/api' }` lê a API real. Modo TV: `#tv` ou tecla T.
-- `frontend/tests/engine-demo.test.mjs` — 23 casos de limite das regras (19/20/31 min, 23h59/24h/48h, 2h59/3h, retorno vencido). O motor real do passo 4 deve passar nos mesmos casos.
+- `frontend/tests/engine-demo.test.mjs` — 23 casos de limite das regras (19/20/31 min, 23h59/24h/48h, 2h59/3h, retorno vencido). O motor real do passo 4 deve passar nos mesmos casos (os 20/31 min equivalem ao nível de urgência médio).
+- `docs/descoberta-uazapi.md` — o que os payloads reais do passo 1 mostraram (sender LID, `messageType`, campos úteis, pendências).
 
 Se este arquivo e a especificação divergirem, vale este arquivo (ele já incorpora a decisão pela uazapi). Dúvida de regra de negócio: perguntar à Ju antes de decidir.
 
@@ -18,7 +21,8 @@ Se este arquivo e a especificação divergirem, vale este arquivo (ele já incor
 - **Número observador:** chip já aquecido, WhatsApp comum (não Business), perfil "Grupo Silva | Qualidade". Já foi usado em atendimento, parado há semanas. Só lê. Nunca envia, nunca é admin, ninguém conversa por ele.
 - **Banco:** Supabase (Postgres).
 - **Backend:** um serviço Node.js + TypeScript com três partes: receptor do webhook, motor de regras (a cada minuto) e job da IA (a cada hora).
-- **IA dos retornos:** API da Anthropic, modelo Claude Haiku (`claude-haiku-5-5`; confirmar a string atual em https://docs.claude.com).
+- **IA (classificação das mensagens do cliente e retornos prometidos):** API da Anthropic, modelo Claude Haiku (`claude-haiku-5-5`; confirmar a string atual em https://docs.claude.com).
+- **O time responde por texto** (padrão da empresa). Áudio do time é exceção rara, mas conta como resposta.
 - **Hospedagem:** local na máquina durante o piloto (com túnel HTTPS de hostname fixo), depois num servidor da Hostinger que rode Node 24h com HTTPS (confirmar o plano antes de migrar).
 - **Painel:** já construído em `frontend/index.html` (prioridade do projeto: o líder precisa ver o painel funcionando cedo). Não reescrever. O backend só serve o arquivo, injeta `RADAR_CONFIG` e expõe a API de `docs/api-contract.md`. Atualiza sozinho a cada minuto. Quem calcula alerta é o servidor; o motor que existe dentro do `index.html` é só da demonstração.
 
@@ -45,20 +49,28 @@ Docs: https://docs.uazapi.com — índice para IA em `/llms.txt` e `/llms-full.t
 - Histórico local da uazapi: até 7 dias. O banco do Radar é a fonte da verdade.
 - `POST /message/find` (com `limit`/`offset`) permite reconciliar mensagens perdidas. `POST /group/list` (com `noParticipants: true`) lista grupos.
 - Limite: 10 chamadas/s por instância (rajada 20). `429` traz `Retry-After`.
-- Áudio: `POST /message/download` com `transcribe: true` transcreve (precisa de credencial configurada). Fora do escopo inicial.
+- Áudio: `POST /message/download` com `transcribe: true` transcreve (precisa de credencial configurada). Necessário para o áudio do **cliente**, que é transcrito antes da classificação (passo 3b).
 - IDs (`id`, `messageid`, JIDs) são strings opacas. Não remover sufixos (`@g.us`, `@s.whatsapp.net`, `@lid`).
 
-**Ainda não sabemos (descobrir com payloads reais no grupo de teste, ver passo 1):**
-- Se `sender` em grupo chega como número (`...@s.whatsapp.net`) ou como `@lid`. Se vier LID, a tabela `time` precisa guardar os dois identificadores.
-- Os valores de `messageType` para áudio, reação, figurinha e resposta citada.
+**Descoberto com payloads reais (passo 1, detalhes em `docs/descoberta-uazapi.md`):**
+- `sender` em grupo chega como `@lid`. O número real vem em `sender_pn` (`...@s.whatsapp.net`) e o LID também em `sender_lid`. Na amostra (10 mensagens), todas traziam os três campos. A tabela `time` guarda os dois identificadores.
+- `messageType` observados: `Conversation`, `ExtendedTextMessage`, `AudioMessage`, `ImageMessage`, `DocumentMessage`, `StickerMessage`, `ReactionMessage`.
+- `fromMe` vem `true` nas mensagens do próprio observador.
+- Campos úteis: `groupName`, `chatid`, `chatlid`, `messageid`, `senderName`, `messageTimestamp`, `mediaType`, `quoted`.
+
+**Ainda não sabemos:**
+- Se `sender_pn` vem sempre (se faltar, identificar pelo `sender_lid`).
+- Como `quoted` aparece preenchido numa resposta citada.
+- Em qual campo chega a legenda de foto e de documento.
 
 ## Modelo de dados (Supabase)
 
 Nomes como na especificação.
 
 - `grupos`: `id_grupo` (pk), `cliente`, `especialista`, `gestor`, `ativo` (bool). Preenchida pelo CS.
-- `time`: `numero` (e, se necessário, `lid`), `nome`. Quem não está nela é cliente.
-- `mensagens`: `id_mensagem` (unique, = `messageid`), `id_grupo`, `autor_numero`, `autor_tipo` (`time`|`cliente`), `tipo` (texto, audio, reacao, figurinha, outro), `texto` (áudio: só a marca), `enviada_em`. Índice em `(id_grupo, enviada_em desc)`.
+- `time`: `numero` (`sender_pn`), `lid` (`sender_lid`), `nome`. Quem não está nela é cliente.
+- `mensagens`: `id_mensagem` (unique, = `messageid`), `id_grupo`, `autor_numero`, `autor_tipo` (`time`|`cliente`), `tipo` (texto, audio, reacao, figurinha, outro), `texto` (áudio: só a marca), `enviada_em`. Índice em `(id_grupo, enviada_em desc)`. Mensagens do cliente ganham a classificação da IA: `categoria`, `urgencia` (`alto`|`medio`|`baixo`), `exige_resposta` (bool).
+- `prazos_urgencia`: tabela de configuração com os prazos de "sem resposta" por nível (`urgencia`, `aviso_min`, `gestor_min`). Mudar prazo é mudar linha, não código.
 - `promessas`: `id`, `id_grupo`, `especialista`, `promessa`, `prazo`, `criada_em`, `status` (`aberta`|`cumprida`), `id_mensagem_origem`.
 - `marcacoes`: histórico de "Resolvi por fora" (nunca apagar): `id`, `id_grupo`, `marcado_por`, `como` (`ligacao`|`privado`|`reuniao`), `marcado_em`, `encerrada_em`, `encerrada_por` (`mensagem_no_grupo`|`desfeita`|`expirou`).
 - `eventos_brutos`: payloads (sem o `token`) só durante a fase de descoberta. Remover depois.
@@ -71,15 +83,33 @@ RLS ligado em tudo. O backend usa a service role; o painel nunca fala direto com
 
 | Situação | Como medir | Aviso ao especialista | Sobe ao gestor |
 |---|---|---|---|
-| Sem resposta | última mensagem do grupo é do cliente; tempo desde ela | 20 min | 31 min |
+| Sem resposta | mensagem do cliente que exige resposta, sem mensagem do time depois; tempo desde ela | conforme o nível (tabela abaixo) | conforme o nível |
 | Sem contato | tempo desde a última mensagem do time | 1 dia | 2 dias |
 | Retorno vencido | promessa aberta passou do prazo | não tem | assim que vence |
 
+Prazos de "sem resposta" por nível de urgência (aprovados; ficam na tabela de configuração `prazos_urgencia`):
+
+| Nível | Exemplos | Aviso ao especialista | Sobe ao gestor |
+|---|---|---|---|
+| Alto | reclamação, reembolso, cancelamento | 10 min | 15 min |
+| Médio | dúvida, solicitação, crítica | 20 min | 31 min |
+| Baixo | elogio, feedback | 60 min | 90 min |
+
+- **Toda interação do cliente exige resposta**, exceto cumprimento, agradecimento e encerramento ("obrigado", "valeu", "ok"), que não iniciam o relógio. O que muda entre as outras é a velocidade (o nível).
+- **O que conta como mensagem** (time e cliente): só `Conversation`, `ExtendedTextMessage` e `AudioMessage`. `ReactionMessage`, `StickerMessage`, `ImageMessage`, `DocumentMessage` e vídeo são ignorados. A confirmar: mídia com legenda conta como texto.
 - Uma mensagem do time zera "sem resposta" e "sem contato" na hora.
 - Tempo corrido, 24h por dia. **Parametrizar** para poder virar horário comercial (ex.: 8h–20h, seg–sáb) sem reescrever; a Ju decide antes de ligar para valer.
 - Reação com emoji, figurinha ou "ok" do time **não** zera "sem resposta". Precisa ser texto ou áudio.
-- Áudio do time conta como resposta.
+- Áudio do time conta como resposta (é exceção rara; o padrão é texto).
 - Grupos com `ativo = não` saem do radar.
+
+## Classificação das mensagens do cliente (IA)
+
+1. Cada mensagem do cliente que conta (ver acima) é classificada pela IA (Claude Haiku), com as últimas mensagens do grupo como contexto. Áudio do cliente é transcrito antes (`/message/download` com `transcribe: true`).
+2. A IA devolve o tipo da mensagem e o nível de urgência: **alto** (reclamação, reembolso, cancelamento), **médio** (dúvida, solicitação, crítica), **baixo** (elogio, feedback); ou marca como cumprimento/agradecimento/encerramento, que não exige resposta.
+3. Falha da IA, JSON inválido ou dúvida: vale **médio** (o relógio nunca deixa de correr por erro do classificador).
+4. O critério inicial é o julgamento da IA. Ajustar depois com os dados do piloto (prompt versionado em `prompts/`).
+5. Prazos relativos ditos nas mensagens ("amanhã de noite", "até sexta") são resolvidos a partir do horário da mensagem em `America/Sao_Paulo`, não do horário em que a IA roda.
 
 ## "Resolvi por fora"
 
@@ -123,8 +153,8 @@ Mensagens: {mensagens}
 
 ## Avisos
 
-- Especialista: aviso de 20 min sem resposta e de 1 dia sem contato (notificação do sistema interno ou e-mail).
-- Gestor: tudo que sobe (31 min, 2 dias, retorno vencido, marcação à mão que voltou).
+- Especialista: aviso de sem resposta (10/20/60 min conforme o nível) e de 1 dia sem contato (notificação do sistema interno ou e-mail).
+- Gestor: tudo que sobe (15/31/90 min conforme o nível, 2 dias, retorno vencido, marcação à mão que voltou).
 - Ju: resumo diário às 18h por e-mail, totais do dia por especialista.
 - **Nunca por WhatsApp**, para não pôr os números em risco.
 
@@ -138,6 +168,9 @@ Cada passo termina com testes passando e algo que dá para ver funcionando.
 1. **Receptor do webhook + captura.** `POST /hooks/whatsapp/<segredo>`: valida, responde 200, grava o payload (sem `token`) em `eventos_brutos`. Teste com o observador num **grupo interno de teste**: texto, áudio, reação, figurinha, resposta citada, de pessoas diferentes. Resultado: resolver as duas dúvidas da seção uazapi.
 2. **Script de grupos.** Lista os grupos da instância e gera um CSV (`id_grupo`, nome) para o CS preencher especialista, gestor e ativo; depois importa em `grupos`. Idem para `time`.
 3. **Normalizador** payload → `mensagens` (autor_tipo, tipo, dedupe por `messageid`, ms → timestamptz).
+
+3b. **Classificador** das mensagens do cliente (IA + transcrição de áudio do cliente; ver "Classificação das mensagens do cliente"). Vem antes do motor, que depende do nível de urgência. Numerado 3b para não mudar as referências a "passo 4" etc. em outros arquivos.
+
 4. **Motor de regras como função pura** (recebe mensagens, grupos, marcações, promessas, `agora`; devolve alertas) + agendador de 1 minuto.
 5. **Reconciliação e saúde.** Ao subir e a cada poucos minutos, buscar via `/message/find` o que faltou desde a última mensagem recebida. Monitorar `/instance/status`: se a sessão cair, avisar o gestor (um painel que parece "tudo em dia" com o observador desconectado é pior que nenhum painel).
 6. **Resolvi por fora.**
@@ -147,7 +180,11 @@ Cada passo termina com testes passando e algo que dá para ver funcionando.
 
 ## Casos de teste do motor (mínimo)
 
-- Mensagem do cliente: 19 min → nada; 20 min → aviso; 31 min → gestor.
+- Mensagem do cliente nível médio: 19 min → nada; 20 min → aviso; 31 min → gestor.
+- Nível alto: 9 min → nada; 10 min → aviso; 15 min → gestor. Nível baixo: 59 min → nada; 60 min → aviso; 90 min → gestor.
+- Cumprimento, agradecimento ou encerramento do cliente ("obrigado", "valeu", "ok") não inicia o relógio.
+- Falha do classificador → tratada como médio.
+- Reação, figurinha, foto e documento do cliente não iniciam o relógio.
 - Resposta de texto ou áudio do time zera; reação, figurinha e "ok" não zeram "sem resposta".
 - Mensagem do observador não conta como time.
 - Sem contato: 23h59 → nada; 1 dia → aviso; 2 dias → gestor.
@@ -163,7 +200,8 @@ Cada passo termina com testes passando e algo que dá para ver funcionando.
 - Tempo corrido ou horário comercial? (Ju decide; começar corrido, parametrizado.)
 - Promessa cumprida por qualquer mensagem do time ou só a que trata do assunto? (Começar com qualquer uma.)
 - Grupo novo que nunca teve mensagem do time: "sem contato" conta desde quando? Sugestão: desde a entrada do observador no grupo. Confirmar com a Ju.
-- `sender` vem como número ou LID? Quais são os `messageType`? (Passo 1.)
+- Mídia com legenda (foto, documento) conta como texto? Em qual campo chega a legenda?
+- Várias mensagens do cliente pendentes com níveis diferentes: qual relógio vale? Sugestão: cada uma corre no seu prazo e o alerta mostra o mais grave. Confirmar com a Ju.
 
 ## Operação durante o piloto (máquina local)
 
