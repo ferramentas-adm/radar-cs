@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit",
     "db:push": "npx supabase db push",
     "webhook:configurar": "tsx scripts/configurar-webhook.ts",
-    "descoberta:resumo": "tsx scripts/resumo-descoberta.ts"
+    "descoberta:resumo": "tsx scripts/resumo-descoberta.ts",
+    "grupos:exportar": "tsx scripts/exportar-grupos.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

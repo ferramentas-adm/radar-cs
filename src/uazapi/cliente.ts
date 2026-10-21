@@ -12,6 +12,24 @@ export interface ConfigWebhook {
   excludeMessages: string[];
 }
 
+export interface ParticipanteGrupo {
+  JID?: string;
+  LID?: string;
+  PhoneNumber?: string; // pode faltar
+}
+
+export interface Grupo {
+  JID: string;
+  Name?: string;
+  ParticipantCount?: number;
+  Participants?: ParticipanteGrupo[] | null; // null com noParticipants: true
+}
+
+export interface PaginaGrupos {
+  groups: Grupo[];
+  pagination: { totalRecords?: number; hasMore: boolean; nextOffset?: number };
+}
+
 export class ErroUazapi extends Error {
   override name = 'ErroUazapi';
   constructor(
@@ -55,6 +73,15 @@ export class ClienteUazapi {
       (st && typeof st === 'object' && st.connected === true ? 'connected' : undefined) ||
       'desconhecido';
     return { status };
+  }
+
+  /** POST /group/list: uma página dos grupos da instância (limit máximo 1000). */
+  async listarGrupos(opcoes: { limit: number; offset: number; noParticipants: boolean }): Promise<PaginaGrupos> {
+    const r = (await this.chamar('POST', '/group/list', opcoes)) as Partial<PaginaGrupos>;
+    return {
+      groups: Array.isArray(r.groups) ? r.groups : [],
+      pagination: r.pagination ?? { hasMore: false },
+    };
   }
 
   /** POST /webhook: configura para onde a instância entrega os eventos. */
