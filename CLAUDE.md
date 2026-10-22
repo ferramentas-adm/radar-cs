@@ -22,10 +22,18 @@ Se este arquivo e a especificação divergirem, vale este arquivo (ele já incor
 - **Fonte das mensagens (a testar):** além do observador, conectar os números corporativos dos especialistas e gerentes, uma instância da uazapi por número, para não precisar adicionar o observador a mais de mil grupos. Cuidados:
   - alerta de "número desconectado" **por pessoa**, para não confundir ponto cego com "ninguém falou";
   - deduplicação pelo `messageid` (o mesmo grupo é visto por mais de um número);
-  - guardar só os grupos cadastrados em `grupos`;
   - a regra de só leitura vale para toda instância conectada: o sistema nunca envia por nenhum número;
   - numa instância de especialista, `fromMe = true` é mensagem do próprio especialista (conta como time); só no observador `fromMe` indica o observador.
-- **Só conversa de grupo com cliente cadastrado** é guardada e analisada. Descartar na chegada, sem gravar: grupo interno, conversa particular com internos e conversa particular com clientes. Grupo que não está em `grupos` é descartado. O número de quem enviou identifica o time (tabela `time`).
+- **Escopo (mudou em 22/10/2026): todas as conversas dos números conectados, exceto as internas.** Antes era só grupo cadastrado.
+  - **Conversa interna** (descartada na chegada, sem gravar nada): conversa privada em que o outro lado é do time (`time.numero`/`time.lid`), ou grupo em que **todos** os participantes são do time. O número do observador (`OBSERVADOR_NUMERO`) não conta nem como time nem como de fora. Participante sem número e com LID desconhecido conta como de fora.
+  - **Conversa de cliente** é todo o resto: grupo com ao menos uma pessoa de fora do time, ou conversa privada com número fora do time.
+  - **Cadastro automático:** na primeira mensagem de uma conversa nova, o receptor cria a linha em `grupos` (`origem = 'automatico'`, ativa), sem CSV. Grupo em que quem escreveu é de fora: grupo de cliente na hora. Grupo em que quem escreveu é do time: consulta os participantes (`POST /group/info`); se a consulta falhar, não grava e tenta de novo na próxima mensagem (nunca classifica às cegas). Grupo interno fica num cache em memória (só a decisão, 6 h). Nome: o do grupo; na privada o nome **não é guardado** (fica nulo).
+  - **Responsável:** especialista = dono da instância que viu a conversa (`time.instancia`); gestor = gestor padrão dessa pessoa (`time.gestor_padrao`). Conversa vista por mais de uma instância: **a primeira que vê fica dona** (o CS muda por importação). Conversas importadas por CSV mantêm o que têm. Instância sem dono em `time.instancia` não cadastra nada.
+  - **O observador não cadastra:** continua só com os grupos já cadastrados e descarta conversa privada.
+  - **Bloqueio:** `ativo = false` tira a conversa da análise e o receptor para de gravar mensagens novas dela; o histórico fica (`npm run conversas:exportar` e `npm run conversas:bloquear`).
+  - **Conversa privada vale só "sem resposta"** ("sem contato" não se aplica: o canal da carteira é o grupo, e cobrar contato no privado empurraria o time para fora do grupo). Ela **nunca aparece como linha no painel**: não entra em alertas, pendentes, `clientes_total`, "clientes em alerta" nem na TV. O painel mostra só números por especialista, na seção "Por especialista" (a implementar): conversas privadas sem resposta que já passaram do prazo de aviso, e conversas privadas com atividade nos últimos 7 dias, com o mês corrente como dica ao passar o mouse. É acompanhamento, não alerta, e nunca mostra nome nem número do cliente.
+  - **Número do cliente na privada nunca fica em claro:** o `jid` da privada é `privada:` + HMAC-SHA256 (chave `RADAR_CHAVE_CONVERSA`, sobre instância + número), e o chatid fica cifrado com AES-256-GCM (chave `RADAR_CHAVE_CIFRA`) em `grupos.chat_cifrado`, só para a reconciliação. O bruto da privada em `eventos_brutos` guarda só uma lista fechada de campos, sem chatid, números nem nome. Nenhum log leva número, JID de privada, hash ou texto (há teste automático).
+  - O formato do evento de conversa privada **ainda não foi confirmado** com payload real: confirmar antes de ligar.
 - **"Registrar ação feita" continua manual** (ligação, privado, reunião). O sistema não registra ação sozinho a partir de conversa particular.
 - **Banco:** Supabase (Postgres).
 - **Backend:** um serviço Node.js + TypeScript com três partes: receptor do webhook, motor de regras (a cada minuto) e job da IA (a cada hora).
@@ -37,10 +45,10 @@ Se este arquivo e a especificação divergirem, vale este arquivo (ele já incor
 ## Regras inegociáveis
 
 1. **O observador nunca envia.** O cliente da uazapi neste projeto expõe só leitura (webhook, `/instance/status`, `/group/list`, `/group/info`, `/message/find`). Nenhuma chamada a `/send/*` nem a rotas de escrita de grupo. Ter um teste automatizado que falha se qualquer arquivo referenciar `/send/`.
-2. **Segredos só no servidor** (`.env`, nunca no git, nunca no painel): token da instância uazapi, `SUPABASE_SERVICE_ROLE_KEY`, chave da Anthropic. Manter `.env.example` sem valores.
+2. **Segredos só no servidor** (`.env`, nunca no git, nunca no painel): token da instância uazapi, `SUPABASE_SERVICE_ROLE_KEY`, chave da Anthropic, `RADAR_CHAVE_CONVERSA` e `RADAR_CHAVE_CIFRA`. Manter `.env.example` sem valores.
 3. **Nunca logar o payload do webhook inteiro.** Ele carrega o `token` da instância. Redigir o campo `token` antes de qualquer log ou gravação.
 4. **Webhook sem assinatura documentada:** usar um segredo aleatório no caminho da URL (`/hooks/whatsapp/<segredo>`) e conferir que o `token` do payload é o da instância esperada. Rejeitar o resto.
-5. **Privacidade:** texto das mensagens visível só para gestor e Ju (RLS no Supabase + API). O painel da TV mostra o motivo do alerta, nunca o conteúdo da conversa.
+5. **Privacidade:** texto das mensagens visível só para gestor e Ju (RLS no Supabase + API). O painel da TV mostra o motivo do alerta, nunca o conteúdo da conversa. Hoje o texto nem é guardado (só a máscara com o tamanho), o número do cliente não é guardado (`autor_numero` nulo para cliente) e, na conversa privada, o número do cliente só existe como hash e cifrado (ver "Escopo").
 6. **Retenção (LGPD):** guardar mensagens só enquanto o cliente estiver `ativo`, mais 90 dias. Job de limpeza.
 7. **Fuso:** gravar `timestamptz` (UTC). Regras, textos e relatórios em `America/Sao_Paulo`.
 8. O número observador nunca conta como mensagem do time.
@@ -51,7 +59,7 @@ Docs: https://docs.uazapi.com — índice para IA em `/llms.txt` e `/llms-full.t
 
 - Autenticação: header `token` (instância) e `admintoken` (servidor). Rotas de instância usam `token`.
 - Estado da sessão: `GET /instance/status` (`connected`, `disconnected`, `connecting`, `hibernated`...).
-- Webhook: `POST /webhook` com `{enabled, url, events, excludeMessages}`. Para o Radar: `events: ["messages", "connection"]` e `excludeMessages: ["isGroupNo"]` (ignora privado). `messages_update` só se for preciso.
+- Webhook: `POST /webhook` com `{enabled, url, events, excludeMessages}`. Para o Radar: `events: ["messages", "connection"]`; no observador `excludeMessages: ["isGroupNo"]` (ignora privado); nas instâncias de pessoa, sem exclusão (recebem grupo e privado). `messages_update` só se for preciso.
 - Evento `messages`: `message.id`, `message.messageid`, `message.chatid` (grupo termina em `@g.us`), `message.sender`, `message.senderName`, `message.fromMe`, `message.isGroup`, `message.messageType` (texto aparece como `Conversation`), `message.text`, `message.messageTimestamp` (**milissegundos**).
 - **O webhook não tenta de novo** se o receptor falhar. Eventos podem chegar repetidos ou fora de ordem. Responder `200` imediatamente e processar depois (receptor lento atrasa a fila da instância).
 - Histórico local da uazapi: até 7 dias. O banco do Radar é a fonte da verdade.
@@ -72,16 +80,27 @@ Docs: https://docs.uazapi.com — índice para IA em `/llms.txt` e `/llms-full.t
 
 ## Modelo de dados (Supabase)
 
-Nomes como na especificação.
+Nomes de domínio em português, como na especificação. **Diferenças de nome em relação à especificação** (valem as das migrations em `supabase/migrations`):
 
-- `grupos`: `id_grupo` (pk), `cliente`, `especialista`, `gestor`, `ativo` (bool), `observador_entrou_em` (timestamptz; início do "sem contato" de grupo que nunca teve mensagem do time). Preenchida pelo CS.
-- `time`: `numero` (`sender_pn`), `lid` (`sender_lid`), `nome`. Quem não está nela é cliente.
-- `mensagens`: `id_mensagem` (unique, = `messageid`), `id_grupo`, `autor_numero`, `autor_tipo` (`time`|`cliente`), `tipo` (texto, audio, reacao, figurinha, outro), `texto` (áudio: só a marca), `enviada_em`. Índice em `(id_grupo, enviada_em desc)`. Mensagens do cliente ganham a classificação da IA: `categoria`, `urgencia` (`alto`|`medio`|`baixo`), `exige_resposta` (bool).
-- `prazos_urgencia`: tabela de configuração com os prazos de "sem resposta" por nível (`urgencia`, `aviso_min`, `gestor_min`). Mudar prazo é mudar linha, não código. Só administrador edita.
+| Especificação | Banco |
+|---|---|
+| `grupos.id_grupo` | `grupos.jid` (único; a pk é `grupos.id`, um número interno). Na API o campo continua `id_grupo`, com o valor do `jid`. |
+| `grupos.cliente` | `grupos.nome` (na API continua `cliente`) |
+| `prazos_urgencia.aviso_min` / `gestor_min` | `minutos_aviso` / `minutos_gestor` |
+| `usuarios.papel` | `perfis.papel` (`admin`\|`comum`), com a função `eh_admin()` para as policies |
+| `config_expediente.dias_uteis` | números ISO: 1 = segunda ... 7 = domingo |
+| `mensagens.id_grupo` | `mensagens.jid`, chave estrangeira para `grupos.jid` |
+
+**Mensagens e promessas apontam para `grupos.jid`** (não para `grupos.id`): `mensagens.jid` já é chave estrangeira para `grupos.jid`, e `promessas` (passo 7) segue o mesmo desenho. Por isso uma conversa nunca é apagada de `grupos`; para tirar da análise, bloqueia (`ativo = false`).
+
+- `grupos`: conversas de cliente (grupos e privadas). `id` (pk interna), `jid` (único: `...@g.us` no grupo, `privada:<hmac>` na privada), `tipo` (`grupo`|`privada`), `nome` (nulo na privada), `especialista`, `gestor` (referências a `time.nome`), `instancia` (dona da conversa), `ativo` (bool; false = bloqueada), `origem` (`importado`|`automatico`), `chat_cifrado` (só na privada), `observador_entrou_em` (timestamptz; início do "sem contato" de grupo que nunca teve mensagem do time; no cadastro automático, a hora da primeira mensagem vista; nulo na privada), `criado_em`. Preenchida pelo CS (CSV) ou pelo cadastro automático.
+- `time`: `nome`, `numero` (`sender_pn`, só dígitos), `lid` (`sender_lid`), `ativo`, `instancia` (instância uazapi do número corporativo da pessoa), `gestor_padrao` (gestor das conversas que essa instância cadastra sozinha). Quem não está nela é cliente.
+- `mensagens`: `id_mensagem` (unique, = `messageid`), `jid`, `instancia`, `autor_numero` (só do time; nulo para cliente), `autor_tipo` (`time`|`cliente`), `tipo` (texto, audio, imagem, documento, reacao, figurinha, video, outro), `conta` (bool), `texto` (só a máscara `[texto omitido: N caracteres]`), `enviada_em`, `recebida_em`. Índice em `(jid, enviada_em desc)`. Mensagens do cliente ganham a classificação da IA: `categoria`, `urgencia` (`alto`|`medio`|`baixo`), `exige_resposta` (bool).
+- `prazos_urgencia`: tabela de configuração com os prazos de "sem resposta" por nível (`urgencia`, `minutos_aviso`, `minutos_gestor`). Mudar prazo é mudar linha, não código. Só administrador edita.
 - `config_expediente`: uma linha só, com `hora_inicio`, `hora_fim`, `dias_uteis` e `fuso` (hoje 9h, 19h, seg–sex, `America/Sao_Paulo`). Nada de expediente fixo no código. Só administrador edita.
 - `feriados`: `data`, `descricao`. O relógio para nesses dias. Só administrador edita.
-- Papel de administrador por usuário (ex.: `usuarios.papel` = `admin`|`comum`). As tabelas de configuração só aceitam escrita de administrador, garantido por RLS **e** pela API (o painel passa pela API, então a checagem de papel na API é obrigatória; esconder na tela não basta).
-- `promessas`: `id`, `id_grupo`, `especialista`, `promessa`, `prazo`, `criada_em`, `status` (`aberta`|`cumprida`), `id_mensagem_origem`.
+- Papel de administrador por usuário (`perfis.papel` = `admin`|`comum`). As tabelas de configuração só aceitam escrita de administrador, garantido por RLS **e** pela API (o painel passa pela API, então a checagem de papel na API é obrigatória; esconder na tela não basta).
+- `promessas`: `id`, `jid` (referência a `grupos.jid`), `especialista`, `promessa`, `prazo`, `criada_em`, `status` (`aberta`|`cumprida`), `id_mensagem_origem`.
 - `marcacoes`: histórico de "Resolvi por fora" (nunca apagar): `id`, `id_grupo`, `marcado_por`, `como` (`ligacao`|`privado`|`reuniao`), `marcado_em`, `encerrada_em`, `encerrada_por` (`mensagem_no_grupo`|`desfeita`|`expirou`).
 - `eventos_brutos`: payloads (sem o `token`) só durante a fase de descoberta. Remover depois.
 - `avisos_enviados`: `(id_grupo, tipo, nivel, episodio)` único, para não reenviar o mesmo aviso a cada minuto.
@@ -112,7 +131,8 @@ Prazos de "sem resposta" por nível de urgência (**aprovados pela Julia**; fica
 - **Grupo novo** (decidido pela Julia, 21/10/2026): o "sem contato" conta a partir da entrada do observador no grupo (`grupos.observador_entrou_em`).
 - Reação com emoji, figurinha ou "ok" do time **não** zera "sem resposta". Precisa ser texto ou áudio.
 - Áudio do time conta como resposta (é exceção rara; o padrão é texto).
-- Grupos com `ativo = não` saem do radar.
+- Conversas com `ativo = não` (bloqueadas) saem do radar.
+- **Conversa privada:** só "sem resposta" (mesmos prazos e expediente dos grupos); "sem contato" não se aplica. Não vira linha no painel; entra só nos números por especialista (ver "Escopo").
 
 ### Expediente (decidido pela Julia, 21/10/2026)
 
@@ -241,8 +261,10 @@ Os casos de limite (19/20/31 min, 23h59/24h/48h etc.) valem **dentro do expedien
 
 ## Antes de ligar para valer
 
-- Avisar os funcionários de que o sistema lê as conversas dos grupos de clientes.
-- O jurídico dá o ok.
+- Avisar os funcionários de que o sistema lê as conversas com clientes nos números corporativos, **inclusive as conversas privadas** (só as internas ficam de fora).
+- O jurídico dá o ok, já sabendo que as conversas privadas dos números corporativos entram.
+- Confirmar o formato do evento de conversa privada com payload real (chatid, chatlid, sender_pn) antes de ligar o webhook das pessoas para receber privadas.
+- Preencher `time.instancia` e `time.gestor_padrao` (`time:importar`) e as chaves `RADAR_CHAVE_CONVERSA` e `RADAR_CHAVE_CIFRA` no `.env`.
 
 ## Operação durante o piloto (máquina local)
 
