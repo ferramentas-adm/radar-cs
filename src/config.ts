@@ -22,6 +22,8 @@ export interface Config {
   uazapiBaseUrl: string | undefined;
   webhookUrlPublica: string | undefined;
   supabase: { url: string; serviceRoleKey: string } | undefined;
+  /** Autenticação básica da página e da API (obrigatória quando há banco). */
+  painel: { usuario: string; senha: string } | undefined;
 }
 
 export class ErroConfig extends Error {
@@ -43,6 +45,8 @@ const esquema = z.object({
   WEBHOOK_URL_PUBLICA: opcional(z.url()),
   SUPABASE_URL: opcional(z.url()),
   SUPABASE_SERVICE_ROLE_KEY: opcional(z.string().min(1)),
+  PAINEL_USUARIO: opcional(z.string().min(1).regex(/^[^:]+$/)),
+  PAINEL_SENHA: opcional(z.string().min(16)),
 });
 
 const DESCRICAO: Record<string, string> = {
@@ -54,6 +58,8 @@ const DESCRICAO: Record<string, string> = {
   WEBHOOK_URL_PUBLICA: 'precisa ser uma URL',
   SUPABASE_URL: 'precisa ser uma URL',
   SUPABASE_SERVICE_ROLE_KEY: 'inválido',
+  PAINEL_USUARIO: 'inválido (não pode ter ":")',
+  PAINEL_SENHA: 'precisa ter pelo menos 16 caracteres',
 };
 
 /** Instâncias do .env. Problemas citam só nomes de variáveis. */
@@ -96,6 +102,9 @@ export function lerConfig(env: NodeJS.ProcessEnv, opcoes: { exigirBanco: boolean
     if (!env.SUPABASE_URL?.trim()) problemas.push('SUPABASE_URL: obrigatório (ou rode com --sem-banco)');
     if (!env.SUPABASE_SERVICE_ROLE_KEY?.trim())
       problemas.push('SUPABASE_SERVICE_ROLE_KEY: obrigatório (ou rode com --sem-banco)');
+    // Com banco o painel sobe junto, e a URL do túnel é pública.
+    if (!env.PAINEL_USUARIO?.trim()) problemas.push('PAINEL_USUARIO: obrigatório (ou rode com --sem-banco)');
+    if (!env.PAINEL_SENHA?.trim()) problemas.push('PAINEL_SENHA: obrigatório (ou rode com --sem-banco)');
   }
   if (problemas.length > 0 || !r.success) {
     throw new ErroConfig(`Configuração inválida no .env:\n- ${[...new Set(problemas)].join('\n- ')}`);
@@ -112,5 +121,7 @@ export function lerConfig(env: NodeJS.ProcessEnv, opcoes: { exigirBanco: boolean
       e.SUPABASE_URL && e.SUPABASE_SERVICE_ROLE_KEY
         ? { url: e.SUPABASE_URL, serviceRoleKey: e.SUPABASE_SERVICE_ROLE_KEY }
         : undefined,
+    painel:
+      e.PAINEL_USUARIO && e.PAINEL_SENHA ? { usuario: e.PAINEL_USUARIO, senha: e.PAINEL_SENHA } : undefined,
   };
 }

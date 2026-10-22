@@ -16,10 +16,30 @@ describe('lerConfig', () => {
     expect(() => ler({ ...base, WEBHOOK_SEGREDO: 'curto' })).toThrow(/WEBHOOK_SEGREDO/);
   });
 
-  it('exige Supabase quando pedido', () => {
+  it('exige Supabase e login do painel quando há banco', () => {
     expect(() => ler(base, true)).toThrow(/SUPABASE_URL/);
-    const c = ler({ ...base, SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'chave' }, true);
+    expect(() => ler(base, true)).toThrow(/PAINEL_SENHA/);
+    const banco = { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'chave' };
+    expect(() => ler({ ...base, ...banco }, true)).toThrow(/PAINEL_USUARIO/);
+    const c = ler({ ...base, ...banco, PAINEL_USUARIO: 'piloto', PAINEL_SENHA: 'senha-bem-longa-1234' }, true);
     expect(c.supabase).toEqual({ url: 'https://x.supabase.co', serviceRoleKey: 'chave' });
+    expect(c.painel).toEqual({ usuario: 'piloto', senha: 'senha-bem-longa-1234' });
+  });
+
+  it('senha do painel curta ou usuário com ":" é recusado, sem mostrar o valor', () => {
+    expect(() => ler({ ...base, PAINEL_USUARIO: 'piloto', PAINEL_SENHA: 'curta-XYZ' })).toThrow(/PAINEL_SENHA/);
+    expect(() => ler({ ...base, PAINEL_USUARIO: 'pi:loto', PAINEL_SENHA: 'senha-bem-longa-1234' })).toThrow(
+      /PAINEL_USUARIO/,
+    );
+    try {
+      ler({ ...base, PAINEL_USUARIO: 'piloto', PAINEL_SENHA: 'curta-XYZ' });
+    } catch (e) {
+      expect((e as Error).message).not.toContain('curta-XYZ');
+    }
+  });
+
+  it('sem banco, o painel é opcional', () => {
+    expect(ler(base).painel).toBeUndefined();
   });
 
   it('o erro cita as variáveis, nunca os valores', () => {

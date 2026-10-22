@@ -20,7 +20,8 @@
     "descoberta:resumo": "tsx scripts/resumo-descoberta.ts",
     "grupos:exportar": "tsx scripts/exportar-grupos.ts",
     "grupos:importar": "tsx scripts/importar-grupos.ts",
-    "time:importar": "tsx scripts/importar-time.ts"
+    "time:importar": "tsx scripts/importar-time.ts",
+    "mensagens:resumo": "tsx scripts/resumo-mensagens.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

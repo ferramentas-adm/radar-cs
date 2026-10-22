@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Cadastro } from '../cadastro.js';
 import type { InstanciaConfig } from '../config.js';
+import { statusDoEventoConexao } from '../instancias/estado.js';
 import { jidDoGrupo, normalizarMensagem } from '../mensagens/normalizar.js';
 import type { EventoBruto } from '../repositorio.js';
 import { sanitizarPayload } from './sanitizar.js';
@@ -18,6 +19,8 @@ export interface DepsWebhook {
   instancias: InstanciaConfig[];
   cadastro: Cadastro;
   fila: { enfileirar(evento: EventoBruto): void };
+  /** Recebe o status dos eventos "connection" (não grava nada). */
+  estado?: { registrar(nome: string, statusUazapi: string, agora: number): void };
 }
 
 export function registrarWebhook(app: FastifyInstance, deps: DepsWebhook): void {
@@ -45,6 +48,12 @@ export function registrarWebhook(app: FastifyInstance, deps: DepsWebhook): void 
 
       setImmediate(() => {
         try {
+          const conexao = statusDoEventoConexao(payload);
+          if (conexao !== undefined) {
+            deps.estado?.registrar(instancia.nome, conexao, Date.now());
+            req.log.info({ instancia: instancia.nome, status: conexao }, 'status da instância');
+            return;
+          }
           // Filtro antes de qualquer gravação. O log não leva o jid (identifica o cliente).
           const jid = jidDoGrupo(payload);
           if (!jid || !deps.cadastro.grupoAtivo(jid)) {

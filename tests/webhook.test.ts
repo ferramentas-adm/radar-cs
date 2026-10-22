@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Cadastro } from '../src/cadastro.js';
 import type { InstanciaConfig } from '../src/config.js';
+import { EstadoInstancias } from '../src/instancias/estado.js';
 import type { EventoBruto, RepositorioEventos } from '../src/repositorio.js';
 import { buildApp } from '../src/server.js';
 import {
@@ -138,6 +139,27 @@ describe('filtro na chegada', () => {
 
   it('evento de conexão: 200 e nada gravado (status fica para a fase B)', async () => {
     expect(await enviar({ ...eventoConexao(), token: TOKEN_RONI })).toEqual({ status: 200, gravados: [] });
+  });
+
+  it('evento de conexão atualiza o estado da instância identificada pelo token', async () => {
+    const estado = new EstadoInstancias(['observador', 'roni_ramos']);
+    const pasta = await mkdtemp(join(tmpdir(), 'radar-cs-'));
+    const { app } = buildApp({
+      segredo: SEGREDO,
+      instancias: INSTANCIAS,
+      cadastro: CADASTRO,
+      repo: new RepoMemoria(),
+      arquivoPendentes: join(pasta, 'p.jsonl'),
+      logger: false,
+      estado,
+    });
+    await post(app, SEGREDO, { ...eventoConexao(), token: TOKEN });
+    await post(app, SEGREDO, { ...eventoConexao(), token: TOKEN_RONI, instance: { status: 'disconnected' } });
+    await proximoTique();
+    expect(estado.resumo().status).toBe('desconectado');
+    await post(app, SEGREDO, { ...eventoConexao(), token: TOKEN_RONI });
+    await proximoTique();
+    expect(estado.resumo().status).toBe('conectado');
   });
 
   it('mensagem do próprio observador: nada gravado', async () => {

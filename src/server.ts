@@ -1,5 +1,7 @@
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import { registrarPainel, type DepsPainel } from './api/painel.js';
 import type { Cadastro } from './cadastro.js';
+import type { EstadoInstancias } from './instancias/estado.js';
 import type { InstanciaConfig } from './config.js';
 import type { RepositorioEventos } from './repositorio.js';
 import { FilaGravacao } from './webhook/fila.js';
@@ -17,6 +19,10 @@ export interface DepsApp {
   arquivoPendentes: string;
   esperaBaseMs?: number;
   logger?: OpcoesLogger;
+  /** Estado de conexão das instâncias (eventos "connection"). */
+  estado?: EstadoInstancias;
+  /** Página e GET /api/radar. Sem isto, só o receptor do webhook. */
+  painel?: DepsPainel;
 }
 
 /** Troca o segredo da URL do webhook por *** antes de qualquer log. */
@@ -62,7 +68,10 @@ export function buildApp(deps: DepsApp): { app: FastifyInstance; fila: FilaGrava
     instancias: deps.instancias,
     cadastro: deps.cadastro,
     fila,
+    ...(deps.estado ? { estado: deps.estado } : {}),
   });
+
+  if (deps.painel) registrarPainel(app, deps.painel);
 
   return { app, fila };
 }
