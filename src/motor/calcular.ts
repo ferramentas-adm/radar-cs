@@ -2,9 +2,12 @@
 // de docs/api-contract.md. Mesma lógica do motor de demonstração do painel, com tempo de expediente.
 // Nesta fatia: só "sem resposta" (urgência fixa em médio) e "sem contato". Promessas e
 // "Registrar ação feita" ficam vazios.
-import { somarDiasUteis, somarExpediente, type Calendario } from './expediente.js';
+// Conversa privada nunca vira linha (alertas, pendentes, clientes, resumo): entra só nos números
+// por especialista (privadas sem resposta além do prazo de aviso; com atividade em 7 dias e no mês).
+import { inicioDoMes, somarDiasUteis, somarExpediente, type Calendario } from './expediente.js';
 
 const MIN = 60_000;
+const SETE_DIAS = 7 * 24 * 60 * MIN;
 
 export interface GrupoMotor {
   id_grupo: string; // jid
@@ -14,6 +17,10 @@ export interface GrupoMotor {
   ativo: boolean;
   /** ms; início do "sem contato" de grupo que nunca teve mensagem do time. */
   observador_entrou_em: number | null;
+  /** grupo (padrão) ou privada. */
+  tipo?: 'grupo' | 'privada';
+  /** Só na privada: ms da última mensagem de qualquer lado (conte ou não), para a atividade. */
+  ultima_atividade_em?: number | null;
 }
 
 /** Só mensagens que contam (conta = true). */
@@ -62,7 +69,8 @@ const ts = (s: string) => Date.parse(s);
 
 export function calcular(e: EntradaMotor) {
   const ag = e.agora;
-  const grupos = e.grupos.filter((g) => g.ativo);
+  const grupos = e.grupos.filter((g) => g.ativo && (g.tipo ?? 'grupo') === 'grupo');
+  const privadas = e.grupos.filter((g) => g.ativo && g.tipo === 'privada');
 
   // Mensagens por grupo, sem duplicadas (mesmo id_mensagem) e em ordem de envio.
   const porGrupo = new Map<string, MensagemMotor[]>();
@@ -86,15 +94,20 @@ export function calcular(e: EntradaMotor) {
   }[] = [];
   const estados = new Map<string, Estado>();
 
-  for (const g of grupos) {
-    const msgs = porGrupo.get(g.id_grupo) ?? [];
+  /** Última mensagem do time e as do cliente depois dela (em ordem). Mensagem do time zera todas. */
+  const situacao = (id: string) => {
+    const msgs = porGrupo.get(id) ?? [];
     let ultimaTime: number | null = null;
     for (const m of msgs) if (m.autor_tipo === 'time') ultimaTime = Math.max(ultimaTime ?? 0, m.enviada_em);
-    // Mensagem do time zera todas as pendentes até aquele momento.
     const fila = msgs
       .filter((m) => m.autor_tipo === 'cliente' && (ultimaTime === null || m.enviada_em > ultimaTime))
       .map((m) => m.enviada_em)
       .sort((a, b) => a - b);
+    return { ultimaTime, fila };
+  };
+
+  for (const g of grupos) {
+    const { ultimaTime, fila } = situacao(g.id_grupo);
 
     const motivos: Motivo[] = [];
     // Sem resposta: cada pendente corre no seu prazo; a mais antiga é a mais grave (mesmo nível).
@@ -172,18 +185,46 @@ export function calcular(e: EntradaMotor) {
       sem_contato: number;
       sem_resposta: number;
       retornos_vencidos: number;
+      conversas_privadas_sem_resposta: number;
+      conversas_privadas_7d: number;
+      conversas_privadas_mes: number;
     }
   >();
+  const itemDe = (especialista: string) => {
+    let item = porEsp.get(especialista);
+    if (!item) {
+      item = {
+        especialista,
+        clientes: [],
+        sem_contato: 0,
+        sem_resposta: 0,
+        retornos_vencidos: 0,
+        conversas_privadas_sem_resposta: 0,
+        conversas_privadas_7d: 0,
+        conversas_privadas_mes: 0,
+      };
+      porEsp.set(especialista, item);
+    }
+    return item;
+  };
   for (const g of grupos) {
-    const item = porEsp.get(g.especialista) ?? {
-      especialista: g.especialista,
-      clientes: [],
-      sem_contato: 0,
-      sem_resposta: 0,
-      retornos_vencidos: 0,
-    };
-    item.clientes.push({ id_grupo: g.id_grupo, cliente: g.cliente, estado: estados.get(g.id_grupo) ?? 'ok' });
-    porEsp.set(g.especialista, item);
+    itemDe(g.especialista).clientes.push({ id_grupo: g.id_grupo, cliente: g.cliente, estado: estados.get(g.id_grupo) ?? 'ok' });
+  }
+
+  // Privadas: só contagens. Sem resposta = a pendente mais antiga já passou do prazo de aviso
+  // (em tempo de expediente, como nos grupos). Atividade = última mensagem dentro da janela.
+  const inicioMes = inicioDoMes(ag, e.calendario.expediente.fuso);
+  for (const p of privadas) {
+    const item = itemDe(p.especialista);
+    const { fila } = situacao(p.id_grupo);
+    if (fila.length > 0 && ag >= somarExpediente(fila[0]!, e.prazo.minutos_aviso, e.calendario)) {
+      item.conversas_privadas_sem_resposta++;
+    }
+    const ultima = p.ultima_atividade_em ?? null;
+    if (ultima !== null && ultima <= ag) {
+      if (ultima >= ag - SETE_DIAS) item.conversas_privadas_7d++;
+      if (ultima >= inicioMes) item.conversas_privadas_mes++;
+    }
   }
   for (const a of alertas) {
     const item = porEsp.get(a.especialista);

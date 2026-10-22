@@ -33,6 +33,8 @@ function montar(gs: G[], sobre: Partial<EntradaMotor> = {}): EntradaMotor {
       gestor: g.gestor ?? 'Gestor X',
       ativo: g.ativo ?? true,
       observador_entrou_em: g.observador_entrou_em ?? null,
+      ...(g.tipo ? { tipo: g.tipo } : {}),
+      ...(g.ultima_atividade_em !== undefined ? { ultima_atividade_em: g.ultima_atividade_em } : {}),
     };
     grupos.push(grupo);
     for (const t of g.time ?? [ago(100)]) mensagens.push({ id_mensagem: `m${seq++}`, id_grupo: grupo.id_grupo, autor_tipo: 'time', enviada_em: t });
@@ -219,5 +221,61 @@ describe('ordem, resumo e carteira', () => {
     expect(r.usuario).toEqual({ nome: 'piloto', pode_marcar: false });
     expect(r.observador).toEqual({ status: 'desconectado', desde: new Date(ago(30)).toISOString(), ultima_mensagem_em: new Date(ago(2)).toISOString() });
     expect(JSON.stringify(r)).not.toMatch(/texto/i);
+  });
+});
+
+describe('conversas privadas: só números por especialista', () => {
+  const privada = (o: G): G => ({ tipo: 'privada', cliente: '', id_grupo: `privada:${String(seq++).padStart(64, '0')}`, time: [], cliente_msgs: [], ultima_atividade_em: null, ...o });
+  const esp = (r: ReturnType<typeof run>, nome = 'Esp A') => r.por_especialista.find((e) => e.especialista === nome)!;
+
+  it('nunca vira linha: fora de alertas, pendentes, clientes e resumo', () => {
+    const r = run([privada({ cliente_msgs: [ago(500)], ultima_atividade_em: ago(500) })]);
+    expect(r.alertas).toEqual([]);
+    expect(r.pendentes).toEqual([]);
+    expect(r.resumo.clientes_total).toBe(0);
+    expect(r.resumo.em_alerta).toBe(0);
+    expect(esp(r).clientes).toEqual([]);
+    expect(JSON.stringify(r)).not.toContain('privada:');
+  });
+
+  it('sem resposta: só depois do prazo de aviso (20 min de expediente), sem "sem contato"', () => {
+    expect(esp(run([privada({ cliente_msgs: [ago(19)] })])).conversas_privadas_sem_resposta).toBe(0);
+    expect(esp(run([privada({ cliente_msgs: [ago(20)] })])).conversas_privadas_sem_resposta).toBe(1);
+    expect(esp(run([privada({ cliente_msgs: [ago(40)] })])).conversas_privadas_sem_resposta).toBe(1);
+    // Time respondeu depois: zera. Time escreveu há dias e o cliente nunca: nada (sem contato não se aplica).
+    expect(esp(run([privada({ cliente_msgs: [ago(60)], time: [ago(5)] })])).conversas_privadas_sem_resposta).toBe(0);
+    expect(esp(run([privada({ time: [ago(5 * 24 * 60)] })])).conversas_privadas_sem_resposta).toBe(0);
+  });
+
+  it('sem resposta conta conversas, não mensagens; o relógio para fora do expediente', () => {
+    const r = run([privada({ cliente_msgs: [ago(30), ago(25)] }), privada({ cliente_msgs: [ago(45)] })]);
+    expect(esp(r).conversas_privadas_sem_resposta).toBe(2);
+    // Segunda 20h → conta a partir de terça 9h: às 9h19 ainda não; às 9h20 sim.
+    const seg20 = sp('2026-10-19 20:00');
+    const p = [privada({ cliente_msgs: [seg20] })];
+    expect(esp(run(p, { agora: sp('2026-10-20 09:19') })).conversas_privadas_sem_resposta).toBe(0);
+    expect(esp(run(p, { agora: sp('2026-10-20 09:20') })).conversas_privadas_sem_resposta).toBe(1);
+  });
+
+  it('atividade: distintas nos últimos 7 dias e no mês corrente (fuso de São Paulo)', () => {
+    const r = run([
+      privada({ ultima_atividade_em: ago(10) }),
+      privada({ ultima_atividade_em: AG - 7 * 24 * 60 * MIN }), // exatamente 7 dias: conta
+      privada({ ultima_atividade_em: AG - 8 * 24 * 60 * MIN }), // 12/10: no mês, fora dos 7 dias
+      privada({ ultima_atividade_em: sp('2026-10-01 00:00') }), // primeiro instante do mês
+      privada({ ultima_atividade_em: sp('2026-09-30 23:59') }), // mês anterior
+      privada({ ultima_atividade_em: null }),
+    ]);
+    expect([esp(r).conversas_privadas_7d, esp(r).conversas_privadas_mes]).toEqual([2, 4]);
+  });
+
+  it('privada bloqueada não conta; especialista só com privadas aparece', () => {
+    const r = run([
+      { especialista: 'Esp A' },
+      privada({ especialista: 'Esp B', cliente_msgs: [ago(30)], ultima_atividade_em: ago(30) }),
+      privada({ especialista: 'Esp B', ativo: false, cliente_msgs: [ago(30)], ultima_atividade_em: ago(30) }),
+    ]);
+    expect(esp(r, 'Esp B')).toMatchObject({ clientes: [], conversas_privadas_sem_resposta: 1, conversas_privadas_7d: 1, conversas_privadas_mes: 1 });
+    expect(esp(r, 'Esp A')).toMatchObject({ conversas_privadas_sem_resposta: 0, conversas_privadas_7d: 0, conversas_privadas_mes: 0 });
   });
 });

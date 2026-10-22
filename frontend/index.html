@@ -212,8 +212,10 @@ html.tv .tvbtn{opacity:.5}
       <p class="note">Quantos clientes de cada um estão fora do prazo agora. Cada quadrado é um cliente.</p>
       <p class="legend"><span><i></i>em dia</span><span><i class="d-e"></i>aviso</span><span><i class="d-g"></i>gestor</span><span><i class="d-r"></i>ação feita por fora</span></p>
       <div class="tw"><table>
-        <thead><tr><th>Especialista</th><th class="n">Clientes</th><th class="n">Sem contato</th><th class="n">Sem resposta</th><th class="n">Retornos vencidos</th></tr></thead>
+        <thead><tr><th>Especialista</th><th class="n">Clientes</th><th class="n">Sem contato</th><th class="n">Sem resposta</th><th class="n">Retornos vencidos</th><th class="n">Conversas privadas sem resposta</th><th class="n">Conversas privadas, 7 dias</th></tr></thead>
         <tbody id="t-time"></tbody></table></div>
+      <p class="note">Conversas privadas (externas) não entram nos alertas: por regra, o atendimento é no grupo. Aqui aparecem só as contagens, sem nome nem número do cliente. Passe o mouse em "7 dias" para ver o mês.</p>
+      <div id="t-priv"></div>
     </section>
     <section class="card" id="retornos">
       <h2>Retornos prometidos</h2>
@@ -355,9 +357,21 @@ html.tv .tvbtn{opacity:.5}
 
     const ord = { gestor: 0, aviso: 1, resolvido_por_fora: 2, ok: 3 };
     const porEsp = new Map();
-    for (const g of grupos) {
-      if (!porEsp.has(g.especialista)) porEsp.set(g.especialista, { especialista: g.especialista, clientes: [], sem_contato: 0, sem_resposta: 0, retornos_vencidos: 0 });
-      porEsp.get(g.especialista).clientes.push({ id_grupo: g.id_grupo, cliente: g.cliente, estado: estados.get(g.id_grupo) });
+    const itemDe = (nome) => {
+      if (!porEsp.has(nome)) porEsp.set(nome, { especialista: nome, clientes: [], sem_contato: 0, sem_resposta: 0, retornos_vencidos: 0, conversas_privadas_sem_resposta: 0, conversas_privadas_7d: 0, conversas_privadas_mes: 0 });
+      return porEsp.get(nome);
+    };
+    for (const g of grupos) itemDe(g.especialista).clientes.push({ id_grupo: g.id_grupo, cliente: g.cliente, estado: estados.get(g.id_grupo) });
+    // Conversas privadas: nunca viram linha (alertas, pendentes, clientes, resumo); só contagens por especialista.
+    // Sem resposta = cliente escreveu depois do time e já passou o prazo de aviso. Atividade = última mensagem
+    // nos últimos 7 dias e no mês corrente (demonstração: São Paulo em UTC-3, sem horário de verão).
+    const sp = new Date(ag - 3 * H), inicioMes = Date.UTC(sp.getUTCFullYear(), sp.getUTCMonth(), 1) + 3 * H;
+    for (const p of (s.privadas || []).filter((x) => x.ativo !== false)) {
+      const e = itemDe(p.especialista);
+      if (p.ultima_cliente > p.ultima_time && ag >= p.ultima_cliente + LIM.respAviso) e.conversas_privadas_sem_resposta++;
+      const ult = Math.max(p.ultima_cliente || 0, p.ultima_time || 0);
+      if (ult && ult <= ag && ult >= ag - 7 * D) e.conversas_privadas_7d++;
+      if (ult && ult <= ag && ult >= inicioMes) e.conversas_privadas_mes++;
     }
     for (const a of alertas) {
       const e = porEsp.get(a.especialista);
@@ -414,12 +428,19 @@ html.tv .tvbtn{opacity:.5}
     'Mercado Boa Vista': [8, 9, 11], 'Academia Corpo em Movimento': [18, 19], 'Vidraçaria Cristal': [12, 13],
     'Móveis Casa Nova': [12, 13, 14, 16, 18]
   };
-  const DEMO = { off: 0, obsOn: true, obsDesde: null, voce: 'Camila Duarte', grupos: [], promessas: [], marc: {} };
+  const DEMO = { off: 0, obsOn: true, obsDesde: null, voce: 'Camila Duarte', grupos: [], promessas: [], marc: {}, privadas: [] };
+  // Conversas privadas da demonstração: [especialista, minutos desde a última do time, minutos desde a última do cliente].
+  const PRIVADAS = [
+    ['Camila Duarte', 300, 45], ['Camila Duarte', 20, 90], ['Camila Duarte', 4000, 4100],
+    ['Rafael Moura', 600, 35], ['Rafael Moura', 500, 26], ['Rafael Moura', 900, 12], ['Rafael Moura', 12000, 12100],
+    ['Thiago Brandão', 50, 70]
+  ];
   const now = () => (IS_DEMO ? Date.now() + DEMO.off : Date.now());
 
   function seed() {
     const t0 = Date.now(), ago = (m) => t0 - m * MIN, ahead = (m) => t0 + m * MIN;
     DEMO.off = 0; DEMO.obsOn = true; DEMO.obsDesde = null; DEMO.marc = {};
+    DEMO.privadas = PRIVADAS.map((r) => ({ especialista: r[0], ultima_time: ago(r[1]), ultima_cliente: ago(r[2]) }));
     DEMO.grupos = LISTA.map((r, i) => ({ id_grupo: '120363040' + String(1001000 + i) + '@g.us', cliente: r[0], especialista: r[1], gestor: GESTOR[r[1]], ativo: true, ultima_time: ago(r[2]), ultima_cliente: ago(r[3]), pend: r[3] < r[2] ? (PILHA[r[0]] || [r[3]]).map(ago) : [] }));
     const id = (n) => DEMO.grupos.find((g) => g.cliente === n).id_grupo;
     DEMO.promessas = [
@@ -437,7 +458,7 @@ html.tv .tvbtn{opacity:.5}
     DEMO.marc[id('Cursos Livre Saber')] = { por: 'Bianca Teixeira', como: 'reuniao', em: ago(25) };
     DEMO.marc[id('Gráfica Ponto Cor')] = { por: 'Rafael Moura', como: 'privado', em: ago(220) };
   }
-  const snapDemo = () => ({ agora: now(), grupos: DEMO.grupos, promessas: DEMO.promessas, marcacoes: DEMO.marc, observador: { status: DEMO.obsOn ? 'conectado' : 'desconectado', desde: DEMO.obsDesde }, usuario: { nome: DEMO.voce, pode_marcar: true } });
+  const snapDemo = () => ({ agora: now(), grupos: DEMO.grupos, privadas: DEMO.privadas, promessas: DEMO.promessas, marcacoes: DEMO.marc, observador: { status: DEMO.obsOn ? 'conectado' : 'desconectado', desde: DEMO.obsDesde }, usuario: { nome: DEMO.voce, pode_marcar: true } });
 
   // ---------- estado e dados ----------
   const S = { radar: null, recebidoEm: 0, open: null, tv: false, seen: null, flash: new Set(), minuto: -1, erro: false, erroEm: 0 };
@@ -698,7 +719,17 @@ html.tv .tvbtn{opacity:.5}
       c1.appendChild(dots); tr.appendChild(c1);
       td(tr, String(e.clientes.length), 'n');
       for (const v of [e.sem_contato, e.sem_resposta, e.retornos_vencidos]) td(tr, String(v), 'n ' + (v > 0 ? 'hot' : 'zero'));
+      // Conversas privadas: só contagens. Campo ausente (API antiga) mostra "—", nunca 0.
+      const num = (v) => (typeof v === 'number' ? v : null);
+      const psr = num(e.conversas_privadas_sem_resposta), p7 = num(e.conversas_privadas_7d), pm = num(e.conversas_privadas_mes);
+      td(tr, psr === null ? '—' : String(psr), 'n ' + (psr ? 'hot' : 'zero'));
+      td(tr, p7 === null ? '—' : String(p7), 'n' + (p7 ? '' : ' zero')).title = 'No mês: ' + (pm === null ? '—' : pm);
       tt.appendChild(tr);
+    }
+    const tpv = $('t-priv'); tpv.textContent = '';
+    for (const e of r.por_especialista) {
+      const n = e.conversas_privadas_sem_resposta;
+      if (typeof n === 'number' && n > 0) tpv.appendChild(el('p', 'note', e.especialista + ' possui ' + n + (n === 1 ? ' conversa privada (externa) sem resposta.' : ' conversas privadas (externas) sem resposta.')));
     }
 
     // retornos

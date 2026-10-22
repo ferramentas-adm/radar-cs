@@ -23,6 +23,8 @@ O backend serve o `index.html` e injeta, antes do `<script>` do painel:
 
 Nenhum campo desta API carrega o texto das mensagens. O painel mostra o **motivo** do alerta, nunca o conteúdo da conversa. O texto das mensagens só existe nas tabelas, com RLS, para gestor e Ju.
 
+**Conversas privadas** (do número corporativo de um especialista com um cliente) nunca aparecem como linha: não entram em `alertas`, `pendentes`, `resolvidos_por_fora`, `retornos`, `por_especialista[].clientes` nem no `resumo`. Elas aparecem só como contagens por especialista (`por_especialista[].conversas_privadas_*`), sem nome, número ou identificador do cliente.
+
 ## GET /api/radar
 
 Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `Z`).
@@ -92,7 +94,10 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
       ],
       "sem_contato": 0,
       "sem_resposta": 1,
-      "retornos_vencidos": 0
+      "retornos_vencidos": 0,
+      "conversas_privadas_sem_resposta": 2,
+      "conversas_privadas_7d": 5,
+      "conversas_privadas_mes": 11
     }
   ],
   "retornos": [
@@ -129,7 +134,12 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 | `pendentes[].estado` | Mesmo valor de `por_especialista[].clientes[].estado`: `ok`, `aviso`, `gestor` ou `resolvido_por_fora`. Define a cor da pilha. Não carrega texto de mensagem. |
 | `voltou_de_marcacao` | `{ como, marcado_por, marcado_em }` quando uma marcação à mão passou de 3 h sem mensagem do time no grupo. |
 | `como` | `ligacao`, `privado` ou `reuniao`. |
-| `por_especialista[].clientes[].estado` | `ok`, `aviso`, `gestor` ou `resolvido_por_fora`. Uma entrada por grupo ativo. |
+| `por_especialista[].clientes[].estado` | `ok`, `aviso`, `gestor` ou `resolvido_por_fora`. Uma entrada por grupo ativo (conversa privada nunca entra). |
+| `por_especialista[]` | Um item por especialista com grupo ativo **ou** com conversa privada ativa (quem só tem privadas vem com `clientes: []`). |
+| `por_especialista[].conversas_privadas_sem_resposta` | Conversas privadas ativas do especialista (o dono da instância) em que o cliente escreveu e o time não respondeu depois, contando só as que já passaram do prazo de aviso (nível médio, 20 min em tempo de expediente, como nos grupos). Conta conversas, não mensagens. É acompanhamento: não entra em `resumo` nem em "clientes em alerta". |
+| `por_especialista[].conversas_privadas_7d` | Conversas privadas ativas distintas com ao menos uma mensagem (qualquer tipo, de qualquer lado) nos últimos 7 × 24 h. |
+| `por_especialista[].conversas_privadas_mes` | O mesmo, desde a meia-noite do dia 1 do mês corrente (`America/Sao_Paulo`). O painel mostra só como dica ao passar o mouse em "7 dias". |
+| `conversas_privadas_*` ausente | O painel mostra "—" (nunca 0), para não afirmar zero com uma API que ainda não manda o campo. |
 | `retornos[].situacao` | `vencido`, `vence_hoje` (até 6 h), `no_prazo`, `cumprido`. Incluir cumpridos só das últimas 24 h. |
 
 ### De onde vem cada coisa (tabelas do `CLAUDE.md`)
@@ -141,6 +151,7 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 | `retorno_vencido`, `retornos` | `promessas` |
 | `pendentes` | `mensagens` (as do cliente depois da última do time, com `exige_resposta`) |
 | `resolvidos_por_fora`, `voltou_de_marcacao` | `marcacoes` |
+| `conversas_privadas_*` | `grupos` com `tipo = 'privada'` e `ativo`, mais `mensagens` (pendentes do cliente e última mensagem de cada conversa) |
 | `observador` | `sync_estado` |
 
 ## POST /api/marcacoes

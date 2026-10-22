@@ -127,6 +127,11 @@ export function somarExpediente(t: number, minutos: number, cal: Calendario): nu
   throw new Error('expediente sem dia útil nos próximos 400 dias');
 }
 
+/** Meia-noite do dia 1 do mês de t, no fuso (início do "mês corrente"). */
+export function inicioDoMes(t: number, fuso: string): number {
+  return instante(`${local(t, fuso).data.slice(0, 8)}01`, 0, fuso);
+}
+
 /**
  * n dias úteis depois de t, no mesmo horário. Fora do expediente, conta a partir da próxima
  * abertura (sábado 20h → segunda 9h → 1 dia útil = terça 9h).

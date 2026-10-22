@@ -110,6 +110,11 @@ describe('GET /api/radar', () => {
     const corpo = r.json() as RespostaRadar;
     expect(corpo.alertas[0]).toMatchObject({ id_grupo: GRUPO, nivel: 'gestor' });
     expect(corpo.usuario.pode_marcar).toBe(false);
+    expect(corpo.por_especialista[0]).toMatchObject({
+      conversas_privadas_sem_resposta: 0,
+      conversas_privadas_7d: 0,
+      conversas_privadas_mes: 0,
+    });
     expect(r.body).not.toMatch(/texto/i);
   });
 

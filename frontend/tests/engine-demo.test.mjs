@@ -83,4 +83,35 @@ t('pilha: estado acompanha o alerta do cliente', () => { const r = run([G({ id_g
 t('pilha: grupo inativo não entra', () => assert.equal(run([G({ ativo: false, ultima_cliente: ago(5) })]).pendentes.length, 0));
 t('pilha: não carrega texto de mensagem', () => assert.ok(!/texto/i.test(JSON.stringify(run([G({ ultima_cliente: ago(40), pend: [ago(40), ago(50)] })]).pendentes))));
 
+// conversas privadas: só contagens por especialista (nunca linha, nunca alerta)
+const PV = (o) => ({ especialista: 'Esp A', ultima_time: ago(100), ultima_cliente: ago(500), ...o });
+const runP = (grupos, privadas) => calcular({ agora: AG, grupos, privadas, promessas: [], marcacoes: {}, observador: { status: 'conectado', desde: null }, usuario: { nome: 'x', pode_marcar: true } });
+const espA = (r) => r.por_especialista.find((e) => e.especialista === 'Esp A');
+t('privada: sem resposta só a partir do prazo de aviso (19 min nada, 20 min conta)', () => {
+  assert.equal(espA(runP([G()], [PV({ ultima_cliente: ago(19) })])).conversas_privadas_sem_resposta, 0);
+  assert.equal(espA(runP([G()], [PV({ ultima_cliente: ago(20) }), PV({ ultima_cliente: ago(40) }), PV({ ultima_cliente: ago(60), ultima_time: ago(5) })])).conversas_privadas_sem_resposta, 2);
+});
+t('privada: não entra em alertas, pendentes, clientes nem em "clientes em alerta"', () => {
+  const r = runP([G()], [PV({ ultima_cliente: ago(40) })]);
+  assert.equal(r.alertas.length, 0); assert.equal(r.pendentes.length, 0);
+  assert.equal(r.resumo.clientes_total, 1); assert.equal(r.resumo.em_alerta, 0);
+  assert.equal(espA(r).clientes.length, 1);
+});
+t('privada: atividade em 7 dias e no mês corrente (conversas distintas)', () => {
+  const r = runP([G()], [
+    PV({ ultima_time: ago(10), ultima_cliente: ago(30) }),
+    PV({ ultima_time: ago(6 * 24 * 60), ultima_cliente: ago(6 * 24 * 60 + 5) }),
+    PV({ ultima_time: ago(8 * 24 * 60), ultima_cliente: ago(8 * 24 * 60 + 5) }), // 12/10: no mês
+    PV({ ultima_time: ago(25 * 24 * 60), ultima_cliente: ago(25 * 24 * 60 + 5) }) // 25/09: mês anterior
+  ]);
+  assert.equal(espA(r).conversas_privadas_7d, 2); assert.equal(espA(r).conversas_privadas_mes, 3);
+});
+t('privada: sem privadas os campos vêm 0; especialista só com privadas aparece; inativa não conta', () => {
+  const r = runP([G()], [PV({ especialista: 'Esp B', ultima_cliente: ago(40) }), PV({ especialista: 'Esp B', ativo: false, ultima_cliente: ago(40) })]);
+  assert.deepEqual([espA(r).conversas_privadas_sem_resposta, espA(r).conversas_privadas_7d, espA(r).conversas_privadas_mes], [0, 0, 0]);
+  const eb = r.por_especialista.find((e) => e.especialista === 'Esp B');
+  assert.equal(eb.clientes.length, 0); assert.equal(eb.conversas_privadas_sem_resposta, 1);
+  assert.equal(run([G()]).por_especialista[0].conversas_privadas_7d, 0);
+});
+
 console.log('\n' + n + ' casos passaram');
