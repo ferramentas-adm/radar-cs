@@ -73,7 +73,7 @@ export function chaveTelefone(valor: string): string {
 
 /** Lê var/time.csv: cabeçalho "nome;numero", separador ponto e vírgula, aceita BOM e CRLF. */
 export function lerTimeCsv(texto: string): MembroTime[] {
-  const linhas = texto.replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim() !== '');
+  const linhas = texto.replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim() !== '');
   const cabecalho = (linhas.shift() ?? '').split(';').map((c) => c.trim().toLowerCase());
   const iNome = cabecalho.indexOf('nome');
   const iNumero = cabecalho.indexOf('numero');
@@ -129,7 +129,7 @@ export function celula(valor: string | number): string {
 /** CSV para o Excel em português: UTF-8 com BOM, ponto e vírgula, CRLF. */
 export function gerarCsv(linhas: LinhaGrupo[]): string {
   const corpo = [COLUNAS.join(';'), ...linhas.map((l) => COLUNAS.map((c) => celula(l[c])).join(';'))];
-  return `﻿${corpo.join('\r\n')}\r\n`;
+  return `\uFEFF${corpo.join('\r\n')}\r\n`;
 }
 
 /** Nome de instância: vira nome de variável e de arquivo, então só letras, números e _ (nada de ../). */

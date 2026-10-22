@@ -9,10 +9,16 @@ const conversas: ConversaBanco[] = [
 describe('gerarCsvConversas', () => {
   it('id, tipo, nome e responsáveis; sem JID; privada sem nome; fórmula neutralizada', () => {
     const csv = gerarCsvConversas(conversas);
-    expect(csv.startsWith('﻿id;tipo;nome;especialista;gestor;instancia;origem;ativo\r\n')).toBe(true);
+    expect(csv.startsWith('\uFEFFid;tipo;nome;especialista;gestor;instancia;origem;ativo\r\n')).toBe(true);
     expect(csv).toContain(`1;grupo;"'=Cliente; A";Roni Ramos;Gestora;roni_ramos;importado;sim`);
     expect(csv).toContain('2;privada;;Roni Ramos;;roni_ramos;automatico;não');
     expect(csv).not.toMatch(/@g\.us|privada:/);
+  });
+
+  it('começa com o BOM (U+FEFF), para o Excel abrir em UTF-8', () => {
+    const csv = gerarCsvConversas([]);
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+    expect(Buffer.from(csv, 'utf8').subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
   });
 
   it('resumo só com contagens', () => {

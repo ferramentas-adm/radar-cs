@@ -29,7 +29,7 @@ export function detectarSeparador(texto: string): ';' | ',' {
 }
 
 export function lerCsv(bruto: string): Csv {
-  const texto = bruto.replace(/^﻿/, '');
+  const texto = bruto.replace(/^\uFEFF/, '');
   const sep = detectarSeparador(texto);
   const registros: LinhaCsv[] = [];
 

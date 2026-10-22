@@ -20,7 +20,7 @@ export function gerarCsvConversas(conversas: ConversaBanco[]): string {
   const linhas = conversas.map((c) =>
     COLUNAS.map((k) => (k === 'ativo' ? (c.ativo ? 'sim' : 'não') : celula(c[k] ?? ''))).join(';'),
   );
-  return `﻿${[COLUNAS.join(';'), ...linhas].join('\r\n')}\r\n`;
+  return `\uFEFF${[COLUNAS.join(';'), ...linhas].join('\r\n')}\r\n`;
 }
 
 /** Única saída para o terminal: contagens. */

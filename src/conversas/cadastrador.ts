@@ -31,6 +31,17 @@ export interface NovaConversa {
   chat_cifrado: string | null;
 }
 
+/**
+ * Falha ao gravar a conversa. A mensagem e o details do PostgREST podem trazer a linha que falhou
+ * (jid, nome, chat_cifrado): aqui fica só uma frase fixa e o code do erro do banco.
+ */
+export class ErroCadastroConversa extends Error {
+  override name = 'ErroCadastroConversa';
+  constructor(readonly codigo: string) {
+    super(`falha ao gravar conversa (código ${codigo})`);
+  }
+}
+
 export type MotivoDescarte =
   | 'bloqueada'
   | 'interna'
@@ -145,7 +156,9 @@ export class Cadastrador {
     try {
       ativo = await this.d.gravarConversa!(nova);
     } catch (e) {
-      this.d.log.warn({ instancia, tipo: c.tipo, erro: (e as Error).message }, 'falha ao cadastrar conversa');
+      // Nunca a mensagem do erro: só o código (vindo do banco) ou o nome do erro.
+      const codigo = e instanceof ErroCadastroConversa ? e.codigo : (e as Error).name;
+      this.d.log.warn({ instancia, tipo: c.tipo, codigo }, 'falha ao cadastrar conversa');
       return descartar('falha_cadastro');
     }
     this.d.cadastro.registrar(jid, ativo);

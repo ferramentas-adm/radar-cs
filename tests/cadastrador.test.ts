@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Cadastrador, type DepsCadastrador, type NovaConversa } from '../src/conversas/cadastrador.js';
+import { gravarConversaSupabase } from '../src/repositorio.js';
 import { jidPrivada } from '../src/conversas/chave.js';
 import { conversaDoEvento } from '../src/conversas/classificar.js';
 import { ErroUazapi } from '../src/uazapi/cliente.js';
@@ -220,5 +221,43 @@ describe('Cadastrador: privada e casos de borda', () => {
     expect(await resolver(mensagemGrupo({ chatid: NOVO }))).toEqual({ acao: 'descartar', motivo: 'falha_cadastro' });
     falhar = false;
     expect((await resolver(mensagemGrupo({ chatid: NOVO }))).acao).toBe('gravar');
+  });
+});
+
+describe('Cadastrador: erro do banco ao gravar a conversa', () => {
+  it('log e exceção levam só a frase fixa e o code; nunca message/details do PostgREST', async () => {
+    const vazamento = `duplicate key: jid=${NOVO} nome=Cliente Teste | Grupo Silva chat_cifrado=v1.abc`;
+    const db = {
+      from: () => ({
+        upsert: async () => ({
+          error: { message: vazamento, details: `Key (jid)=(${NOVO}) nome=(Cliente Teste)`, hint: NOVO, code: '23505' },
+        }),
+      }),
+    };
+    const gravar = gravarConversaSupabase(db as never);
+    await expect(gravar({} as NovaConversa)).rejects.toThrow('falha ao gravar conversa (código 23505)');
+
+    const logs: string[] = [];
+    const log = { info: () => {}, warn: (o: object, m: string) => void logs.push(JSON.stringify(o) + m) };
+    const { resolver } = montar({ gravarConversa: gravar, log });
+    expect(await resolver(mensagemGrupo({ chatid: NOVO }))).toEqual({ acao: 'descartar', motivo: 'falha_cadastro' });
+    const tudo = logs.join('\n');
+    expect(tudo).toContain('falha ao cadastrar conversa');
+    expect(tudo).toContain('23505');
+    for (const proibido of [NOVO, '120363040009999', 'Cliente Teste', 'v1.abc', 'duplicate', 'Key (jid)']) {
+      expect(tudo, proibido).not.toContain(proibido);
+    }
+  });
+
+  it('erro de outro tipo (sem code do banco): só o nome do erro no log', async () => {
+    const logs: object[] = [];
+    const { resolver } = montar({
+      gravarConversa: async () => {
+        throw new Error(`falhou em ${NOVO}`);
+      },
+      log: { info: () => {}, warn: (o) => void logs.push(o) },
+    });
+    await resolver(mensagemGrupo({ chatid: NOVO }));
+    expect(logs).toEqual([{ instancia: 'roni_ramos', tipo: 'grupo', codigo: 'Error' }]);
   });
 });

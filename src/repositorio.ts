@@ -1,7 +1,7 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { NovaConversa } from './conversas/cadastrador.js';
+import { ErroCadastroConversa, type NovaConversa } from './conversas/cadastrador.js';
 import type { MensagemNormalizada } from './mensagens/normalizar.js';
 
 // Onde os eventos que passaram pelo filtro do receptor são gravados.
@@ -42,11 +42,13 @@ export class RepositorioSupabase implements RepositorioEventos {
  * outra instância antes) e devolve o ativo que ficou no banco.
  */
 export function gravarConversaSupabase(db: SupabaseClient): (c: NovaConversa) => Promise<boolean> {
+  // message e details do PostgREST podem trazer a linha (jid, nome, chat_cifrado): só o code sai daqui.
+  const codigo = (erro: { code?: string }) => (typeof erro.code === 'string' && erro.code !== '' ? erro.code : 'desconhecido');
   return async (c) => {
     const ins = await db.from('grupos').upsert(c, { onConflict: 'jid', ignoreDuplicates: true });
-    if (ins.error) throw new Error(`supabase (grupos): ${ins.error.message}`);
+    if (ins.error) throw new ErroCadastroConversa(codigo(ins.error));
     const r = await db.from('grupos').select('ativo').eq('jid', c.jid).single();
-    if (r.error) throw new Error(`supabase (grupos): ${r.error.message}`);
+    if (r.error) throw new ErroCadastroConversa(codigo(r.error));
     return (r.data as { ativo: boolean }).ativo;
   };
 }
