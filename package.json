@@ -18,7 +18,9 @@
     "db:push": "npx supabase db push",
     "webhook:configurar": "tsx scripts/configurar-webhook.ts",
     "descoberta:resumo": "tsx scripts/resumo-descoberta.ts",
-    "grupos:exportar": "tsx scripts/exportar-grupos.ts"
+    "grupos:exportar": "tsx scripts/exportar-grupos.ts",
+    "grupos:importar": "tsx scripts/importar-grupos.ts",
+    "time:importar": "tsx scripts/importar-time.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
