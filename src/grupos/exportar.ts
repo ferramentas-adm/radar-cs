@@ -27,12 +27,13 @@ const dormir = (ms: number) => new Promise<void>((ok) => setTimeout(ok, ms));
 export async function buscarTodosGrupos(
   uazapi: Pick<ClienteUazapi, 'listarGrupos'>,
   esperar: (ms: number) => Promise<void> = dormir,
+  noParticipants = false,
 ): Promise<Grupo[]> {
   const grupos: Grupo[] = [];
   let offset = 0;
   for (;;) {
     const pagina = await comTentativas(
-      () => uazapi.listarGrupos({ limit: LIMITE_PAGINA, offset, noParticipants: false }),
+      () => uazapi.listarGrupos({ limit: LIMITE_PAGINA, offset, noParticipants }),
       esperar,
     );
     grupos.push(...pagina.groups);
@@ -46,7 +47,8 @@ export async function buscarTodosGrupos(
   }
 }
 
-async function comTentativas<T>(chamada: () => Promise<T>, esperar: (ms: number) => Promise<void>): Promise<T> {
+/** 408 e 429 tentam de novo (até 3 vezes), esperando o Retry-After quando vier. */
+export async function comTentativas<T>(chamada: () => Promise<T>, esperar: (ms: number) => Promise<void>): Promise<T> {
   for (let tentativa = 1; ; tentativa++) {
     try {
       return await chamada();

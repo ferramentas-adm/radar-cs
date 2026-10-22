@@ -30,6 +30,12 @@ export interface PaginaGrupos {
   pagination: { totalRecords?: number; hasMore: boolean; nextOffset?: number };
 }
 
+export interface PaginaMensagens {
+  /** Objetos de mensagem como a uazapi devolve (com o texto): ficam só em memória. */
+  messages: Record<string, unknown>[];
+  pagination: { hasMore: boolean; nextOffset?: number };
+}
+
 export class ErroUazapi extends Error {
   override name = 'ErroUazapi';
   constructor(
@@ -97,6 +103,23 @@ export class ClienteUazapi {
       ...(typeof p.LID === 'string' ? { LID: p.LID } : {}),
       ...(typeof p.PhoneNumber === 'string' ? { PhoneNumber: p.PhoneNumber } : {}),
     }));
+  }
+
+  /**
+   * POST /message/find: uma página das mensagens de uma conversa, da mais recente para a mais antiga.
+   * Não há filtro de data: quem chama para de paginar quando passa da janela.
+   */
+  async buscarMensagens(opcoes: { chatid: string; limit: number; offset: number }): Promise<PaginaMensagens> {
+    const r = (await this.chamar('POST', '/message/find', opcoes)) as Record<string, unknown>;
+    const lista = Array.isArray(r.messages) ? (r.messages as unknown[]) : [];
+    const pag = (r.pagination ?? {}) as Record<string, unknown>;
+    return {
+      messages: lista.filter((m): m is Record<string, unknown> => m !== null && typeof m === 'object' && !Array.isArray(m)),
+      pagination: {
+        hasMore: pag.hasMore === true,
+        ...(typeof pag.nextOffset === 'number' ? { nextOffset: pag.nextOffset } : {}),
+      },
+    };
   }
 
   /** POST /webhook: configura para onde a instância entrega os eventos. */

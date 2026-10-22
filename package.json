@@ -22,6 +22,7 @@
     "grupos:importar": "tsx scripts/importar-grupos.ts",
     "time:importar": "tsx scripts/importar-time.ts",
     "mensagens:resumo": "tsx scripts/resumo-mensagens.ts",
+    "mensagens:historico": "tsx scripts/historico-mensagens.ts",
     "conversas:exportar": "tsx scripts/exportar-conversas.ts",
     "conversas:bloquear": "tsx scripts/bloquear-conversa.ts"
   },

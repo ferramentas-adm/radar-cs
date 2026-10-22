@@ -53,6 +53,33 @@ export function gravarConversaSupabase(db: SupabaseClient): (c: NovaConversa) =>
   };
 }
 
+const LOTE_MENSAGENS = 500;
+const codigoErro = (erro: { code?: string }) => (typeof erro.code === 'string' && erro.code !== '' ? erro.code : 'desconhecido');
+
+/**
+ * Histórico: quais messageid já estão em public.mensagens. Erro só com o code (a mensagem do
+ * PostgREST pode ecoar os ids pedidos).
+ */
+export async function mensagensExistentesSupabase(db: SupabaseClient, ids: string[]): Promise<Set<string>> {
+  const existentes = new Set<string>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const r = await db.from('mensagens').select('id_mensagem').in('id_mensagem', ids.slice(i, i + 200));
+    if (r.error) throw new Error(`falha ao ler mensagens (código ${codigoErro(r.error)})`);
+    for (const l of (r.data ?? []) as { id_mensagem: string }[]) existentes.add(l.id_mensagem);
+  }
+  return existentes;
+}
+
+/** Histórico: grava em lotes, como o webhook (messageid repetido é ignorado, nunca sobrescreve). */
+export async function gravarMensagensSupabase(db: SupabaseClient, mensagens: MensagemNormalizada[]): Promise<void> {
+  for (let i = 0; i < mensagens.length; i += LOTE_MENSAGENS) {
+    const { error } = await db
+      .from('mensagens')
+      .upsert(mensagens.slice(i, i + LOTE_MENSAGENS), { onConflict: 'id_mensagem', ignoreDuplicates: true });
+    if (error) throw new Error(`falha ao gravar mensagens (código ${codigoErro(error)})`);
+  }
+}
+
 /** Desenvolvimento sem banco: um evento por linha num arquivo local (pasta var/, fora do git). */
 export class RepositorioArquivo implements RepositorioEventos {
   constructor(private readonly arquivo: string) {}
