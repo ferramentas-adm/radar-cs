@@ -1,13 +1,17 @@
+import type { FastifyInstance } from 'fastify';
+import { CacheCadastro, carregadorSupabase } from './cadastro.js';
 import { ErroConfig, lerConfig } from './config.js';
 import { criarClienteSupabase } from './db/supabase.js';
 import { carregarEnv } from './env.js';
 import { RepositorioArquivo, RepositorioSupabase } from './repositorio.js';
 import { buildApp } from './server.js';
 
-// Sobe o backend. Com --sem-banco grava os eventos em var/eventos-dev.jsonl (enquanto o Supabase não existe).
+// Sobe o backend. Com --sem-banco grava em var/eventos-dev.jsonl, mas sem cadastro nenhum grupo
+// passa pelo filtro: serve só para testar a rota e o token.
 
 const ARQUIVO_PENDENTES = 'var/eventos-pendentes.jsonl';
 const ARQUIVO_DEV = 'var/eventos-dev.jsonl';
+const RECARGA_CADASTRO_MS = 60_000;
 
 async function main(): Promise<void> {
   carregarEnv();
@@ -24,25 +28,40 @@ async function main(): Promise<void> {
     throw e;
   }
 
-  const repo =
-    semBanco || !config.supabase
-      ? new RepositorioArquivo(ARQUIVO_DEV)
-      : new RepositorioSupabase(criarClienteSupabase(config.supabase));
+  const db = !semBanco && config.supabase ? criarClienteSupabase(config.supabase) : undefined;
+  const repo = db ? new RepositorioSupabase(db) : new RepositorioArquivo(ARQUIVO_DEV);
 
-  const { app, fila } = buildApp({
+  // O log do cadastro usa o logger do app, que só existe depois do buildApp.
+  let app: FastifyInstance | undefined;
+  const cadastro = new CacheCadastro(
+    db ? carregadorSupabase(db) : async () => ({ gruposAtivos: [], numerosTime: [] }),
+    {
+      info: (obj, msg) => app?.log.info(obj, msg),
+      warn: (obj, msg) => app?.log.warn(obj, msg),
+    },
+  );
+
+  const montado = buildApp({
     segredo: config.webhookSegredo,
-    tokenInstancia: config.uazapiToken,
-    guardarTexto: config.guardarTexto,
+    instancias: config.instancias,
+    cadastro,
     repo,
     arquivoPendentes: ARQUIVO_PENDENTES,
   });
+  app = montado.app;
+  const { fila } = montado;
+
+  // Sem a primeira carga do cadastro o receptor descartaria tudo: não sobe.
+  await cadastro.atualizar();
+  cadastro.iniciar(RECARGA_CADASTRO_MS);
 
   let encerrando = false;
   const encerrar = async (sinal: string) => {
     if (encerrando) return;
     encerrando = true;
-    app.log.info({ sinal, gravacoes_em_andamento: fila.pendentes }, 'encerrando');
-    await app.close();
+    app?.log.info({ sinal, gravacoes_em_andamento: fila.pendentes }, 'encerrando');
+    cadastro.parar();
+    await app?.close();
     await fila.esvaziar();
     process.exit(0);
   };
@@ -52,9 +71,10 @@ async function main(): Promise<void> {
   // Só localhost: o túnel (e depois o proxy do servidor) é quem expõe para fora.
   await app.listen({ host: '127.0.0.1', port: config.porta });
   app.log.info(
-    { destino: semBanco ? ARQUIVO_DEV : 'supabase', guardar_texto: config.guardarTexto },
+    { destino: semBanco ? ARQUIVO_DEV : 'supabase', instancias: config.instancias.map((i) => i.nome) },
     'receptor do webhook no ar',
   );
+  if (semBanco) app.log.warn('--sem-banco: sem cadastro, todas as mensagens são descartadas pelo filtro');
 
   const reenviados = await fila.reenviarPendentes();
   if (reenviados > 0) app.log.info({ reenviados }, 'eventos pendentes reenviados');

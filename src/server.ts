@@ -1,4 +1,6 @@
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import type { Cadastro } from './cadastro.js';
+import type { InstanciaConfig } from './config.js';
 import type { RepositorioEventos } from './repositorio.js';
 import { FilaGravacao } from './webhook/fila.js';
 import { PREFIXO_WEBHOOK, registrarWebhook } from './webhook/rota.js';
@@ -9,8 +11,8 @@ export type OpcoesLogger = Exclude<FastifyServerOptions['logger'], undefined>;
 
 export interface DepsApp {
   segredo: string;
-  tokenInstancia: string;
-  guardarTexto: boolean;
+  instancias: InstanciaConfig[];
+  cadastro: Cadastro;
   repo: RepositorioEventos;
   arquivoPendentes: string;
   esperaBaseMs?: number;
@@ -57,8 +59,8 @@ export function buildApp(deps: DepsApp): { app: FastifyInstance; fila: FilaGrava
 
   registrarWebhook(app, {
     segredo: deps.segredo,
-    tokenInstancia: deps.tokenInstancia,
-    guardarTexto: deps.guardarTexto,
+    instancias: deps.instancias,
+    cadastro: deps.cadastro,
     fila,
   });
 

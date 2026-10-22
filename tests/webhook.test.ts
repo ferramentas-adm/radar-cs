@@ -2,11 +2,33 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { Cadastro } from '../src/cadastro.js';
+import type { InstanciaConfig } from '../src/config.js';
 import type { EventoBruto, RepositorioEventos } from '../src/repositorio.js';
 import { buildApp } from '../src/server.js';
-import { SEGREDO, TEXTO, TOKEN, eventoConexao, mensagemTexto } from './fixtures/payloads.js';
+import {
+  GRUPO,
+  NUMERO_CLIENTE,
+  NUMERO_TIME,
+  SEGREDO,
+  TEXTO,
+  TOKEN,
+  TOKEN_RONI,
+  eventoConexao,
+  mensagemGrupo,
+} from './fixtures/payloads.js';
 
 const proximoTique = () => new Promise<void>((r) => setImmediate(r));
+
+const INSTANCIAS: InstanciaConfig[] = [
+  { nome: 'observador', token: TOKEN, tipo: 'observador' },
+  { nome: 'roni_ramos', token: TOKEN_RONI, tipo: 'pessoa' },
+];
+
+const CADASTRO: Cadastro = {
+  grupoAtivo: (jid) => jid === GRUPO,
+  ehDoTime: (n) => n.replace(/\D/g, '') === NUMERO_TIME,
+};
 
 class RepoMemoria implements RepositorioEventos {
   gravados: EventoBruto[] = [];
@@ -15,13 +37,13 @@ class RepoMemoria implements RepositorioEventos {
   }
 }
 
-async function montar(repo: RepositorioEventos, guardarTexto = false) {
+async function montar(repo: RepositorioEventos) {
   const pasta = await mkdtemp(join(tmpdir(), 'radar-cs-'));
   const arquivoPendentes = join(pasta, 'pendentes.jsonl');
   const { app, fila } = buildApp({
     segredo: SEGREDO,
-    tokenInstancia: TOKEN,
-    guardarTexto,
+    instancias: INSTANCIAS,
+    cadastro: CADASTRO,
     repo,
     arquivoPendentes,
     esperaBaseMs: 1,
@@ -30,7 +52,9 @@ async function montar(repo: RepositorioEventos, guardarTexto = false) {
   return { app, fila, arquivoPendentes };
 }
 
-const post = (app: Awaited<ReturnType<typeof montar>>['app'], segredo: string, corpo: unknown) =>
+type App = Awaited<ReturnType<typeof montar>>['app'];
+
+const post = (app: App, segredo: string, corpo: unknown) =>
   app.inject({
     method: 'POST',
     url: `/hooks/whatsapp/${segredo}`,
@@ -38,12 +62,21 @@ const post = (app: Awaited<ReturnType<typeof montar>>['app'], segredo: string, c
     payload: typeof corpo === 'string' ? corpo : JSON.stringify(corpo),
   });
 
-describe('POST /hooks/whatsapp/<segredo>', () => {
+/** Envia e espera a fila terminar. Devolve o status HTTP e o que foi gravado. */
+async function enviar(corpo: unknown) {
+  const repo = new RepoMemoria();
+  const { app, fila } = await montar(repo);
+  const r = await post(app, SEGREDO, corpo);
+  await proximoTique();
+  await fila.esvaziar();
+  return { status: r.statusCode, gravados: repo.gravados };
+}
+
+describe('POST /hooks/whatsapp/<segredo>: autenticação', () => {
   it('segredo errado: 404 e nada gravado', async () => {
     const repo = new RepoMemoria();
     const { app, fila } = await montar(repo);
-    const r = await post(app, 'segredo-errado', mensagemTexto());
-    expect(r.statusCode).toBe(404);
+    expect((await post(app, 'segredo-errado', mensagemGrupo())).statusCode).toBe(404);
     await proximoTique();
     await fila.esvaziar();
     expect(repo.gravados).toHaveLength(0);
@@ -62,61 +95,62 @@ describe('POST /hooks/whatsapp/<segredo>', () => {
   });
 
   it('token ausente: 401', async () => {
-    const repo = new RepoMemoria();
-    const { app } = await montar(repo);
-    const { token: _, ...semToken } = mensagemTexto();
-    expect((await post(app, SEGREDO, semToken)).statusCode).toBe(401);
+    const { token: _, ...semToken } = mensagemGrupo();
+    expect((await enviar(semToken)).status).toBe(401);
   });
 
-  it('token de outra instância: 401 e nada gravado', async () => {
-    const repo = new RepoMemoria();
-    const { app, fila } = await montar(repo);
-    const r = await post(app, SEGREDO, { ...mensagemTexto(), token: 'outra-instancia' });
-    expect(r.statusCode).toBe(401);
-    await proximoTique();
-    await fila.esvaziar();
-    expect(repo.gravados).toHaveLength(0);
+  it('token de instância desconhecida: 401 e nada gravado', async () => {
+    expect(await enviar(mensagemGrupo({}, 'outra-instancia'))).toEqual({ status: 401, gravados: [] });
   });
 
-  it('payload válido: 200 e grava sem token e com texto mascarado', async () => {
-    const repo = new RepoMemoria();
-    const { app, fila } = await montar(repo);
-    const r = await post(app, SEGREDO, mensagemTexto());
-    expect(r.statusCode).toBe(200);
-    await proximoTique();
-    await fila.esvaziar();
+  it('a instância vem do token, não do instanceName', async () => {
+    const r = await enviar({ ...mensagemGrupo({}, TOKEN), instanceName: 'roni_ramos' });
+    expect(r.gravados[0]?.instancia).toBe('observador');
+  });
+});
 
-    expect(repo.gravados).toHaveLength(1);
-    const g = repo.gravados[0]!;
-    expect(g.evento).toBe('messages');
-    expect(g.id_mensagem).toBe('3EB0AAAA0001');
-    expect(Number.isNaN(Date.parse(g.recebido_em))).toBe(false);
-    const gravado = JSON.stringify(g.payload);
-    expect(gravado).not.toContain(TOKEN);
-    expect(gravado).not.toContain(TEXTO);
-    expect(gravado).toContain(`[texto omitido: ${TEXTO.length} caracteres]`);
+describe('filtro na chegada', () => {
+  it('grupo cadastrado: grava com a instância e a mensagem normalizada, sem token e com texto mascarado', async () => {
+    const { status, gravados } = await enviar(mensagemGrupo());
+    expect(status).toBe(200);
+    expect(gravados).toHaveLength(1);
+    const g = gravados[0]!;
+    expect(g).toMatchObject({ evento: 'messages', id_mensagem: '3EB0BBBB0001', instancia: 'roni_ramos' });
+    expect(g.mensagem).toMatchObject({ jid: GRUPO, autor_tipo: 'cliente', autor_numero: null, conta: true });
+    const tudo = JSON.stringify(g);
+    expect(tudo).not.toContain(TOKEN_RONI);
+    expect(tudo).not.toContain(TEXTO);
+    expect(tudo).toContain(`[texto omitido: ${TEXTO.length} caracteres]`);
   });
 
-  it('com DESCOBERTA_GUARDAR_TEXTO=true grava o texto, mas nunca o token', async () => {
-    const repo = new RepoMemoria();
-    const { app, fila } = await montar(repo, true);
-    await post(app, SEGREDO, mensagemTexto());
-    await proximoTique();
-    await fila.esvaziar();
-    const gravado = JSON.stringify(repo.gravados[0]!.payload);
-    expect(gravado).toContain(TEXTO);
-    expect(gravado).not.toContain(TOKEN);
+  it('conversa privada: 200 e nada gravado', async () => {
+    const privada = mensagemGrupo({ isGroup: false, chatid: `${NUMERO_CLIENTE}@s.whatsapp.net` });
+    expect(await enviar(privada)).toEqual({ status: 200, gravados: [] });
   });
 
-  it('evento de conexão também é gravado, sem id_mensagem', async () => {
-    const repo = new RepoMemoria();
-    const { app, fila } = await montar(repo);
-    expect((await post(app, SEGREDO, eventoConexao())).statusCode).toBe(200);
-    await proximoTique();
-    await fila.esvaziar();
-    expect(repo.gravados[0]).toMatchObject({ evento: 'connection', id_mensagem: null });
+  it('grupo não cadastrado (ou inativo, ou interno): 200 e nada gravado', async () => {
+    expect(await enviar(mensagemGrupo({ chatid: '120363999999999@g.us' }))).toEqual({ status: 200, gravados: [] });
   });
 
+  it('chatid de grupo com isGroup false não passa', async () => {
+    expect((await enviar(mensagemGrupo({ isGroup: false }))).gravados).toEqual([]);
+  });
+
+  it('evento de conexão: 200 e nada gravado (status fica para a fase B)', async () => {
+    expect(await enviar({ ...eventoConexao(), token: TOKEN_RONI })).toEqual({ status: 200, gravados: [] });
+  });
+
+  it('mensagem do próprio observador: nada gravado', async () => {
+    expect((await enviar(mensagemGrupo({ fromMe: true }, TOKEN))).gravados).toEqual([]);
+  });
+
+  it('fromMe na instância de uma pessoa: mensagem do time', async () => {
+    const r = await enviar(mensagemGrupo({ fromMe: true, sender_pn: `${NUMERO_TIME}@s.whatsapp.net` }));
+    expect(r.gravados[0]?.mensagem).toMatchObject({ autor_tipo: 'time', autor_numero: NUMERO_TIME });
+  });
+});
+
+describe('fila', () => {
   it('responde 200 antes de a gravação terminar', async () => {
     let liberar!: () => void;
     let chamadas = 0;
@@ -127,8 +161,7 @@ describe('POST /hooks/whatsapp/<segredo>', () => {
       },
     };
     const { app, fila } = await montar(lento);
-    const r = await post(app, SEGREDO, mensagemTexto());
-    expect(r.statusCode).toBe(200);
+    expect((await post(app, SEGREDO, mensagemGrupo())).statusCode).toBe(200);
     await proximoTique();
     expect(chamadas).toBe(1);
     expect(fila.pendentes).toBe(1); // ainda gravando
@@ -137,7 +170,7 @@ describe('POST /hooks/whatsapp/<segredo>', () => {
     expect(fila.pendentes).toBe(0);
   });
 
-  it('banco fora: tenta 3 vezes, salva em pendentes (sanitizado) e reenvia depois', async () => {
+  it('banco fora: tenta 3 vezes, salva em pendentes (sem token e sem texto) e reenvia depois', async () => {
     let tentativas = 0;
     const fora: RepositorioEventos = {
       gravar: async () => {
@@ -146,28 +179,28 @@ describe('POST /hooks/whatsapp/<segredo>', () => {
       },
     };
     const { app, fila, arquivoPendentes } = await montar(fora);
-    expect((await post(app, SEGREDO, mensagemTexto())).statusCode).toBe(200);
+    expect((await post(app, SEGREDO, mensagemGrupo())).statusCode).toBe(200);
     await proximoTique();
     await fila.esvaziar();
     expect(tentativas).toBe(3);
 
     const conteudo = await readFile(arquivoPendentes, 'utf8');
     expect(conteudo.trim().split('\n')).toHaveLength(1);
-    expect(conteudo).not.toContain(TOKEN);
+    expect(conteudo).not.toContain(TOKEN_RONI);
     expect(conteudo).not.toContain(TEXTO);
 
-    // Banco voltou: o mesmo arquivo é reenviado por outra fila.
+    // Banco voltou: o mesmo arquivo é reenviado por outra fila, com a mensagem normalizada junto.
     const repo = new RepoMemoria();
     const { fila: filaNova } = buildApp({
       segredo: SEGREDO,
-      tokenInstancia: TOKEN,
-      guardarTexto: false,
+      instancias: INSTANCIAS,
+      cadastro: CADASTRO,
       repo,
       arquivoPendentes,
       logger: false,
     });
     expect(await filaNova.reenviarPendentes()).toBe(1);
-    expect(repo.gravados[0]!.id_mensagem).toBe('3EB0AAAA0001');
+    expect(repo.gravados[0]?.mensagem?.id_mensagem).toBe('3EB0BBBB0001');
     expect(await filaNova.reenviarPendentes()).toBe(0); // arquivo consumido
   });
 });

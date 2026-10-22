@@ -20,3 +20,15 @@ export function tokenValido(payload: unknown, tokenInstancia: string): boolean {
   const token = tokenDoPayload(payload);
   return token !== undefined && iguaisSeguro(token, tokenInstancia);
 }
+
+/**
+ * Qual instância mandou o evento, pelo token do payload (nunca pelo instanceName, que não é segredo).
+ * Compara com todas as instâncias, sem parar na primeira, para o tempo não depender de qual bateu.
+ */
+export function instanciaDoPayload<T extends { token: string }>(payload: unknown, instancias: T[]): T | undefined {
+  const token = tokenDoPayload(payload);
+  if (token === undefined) return undefined;
+  let achada: T | undefined;
+  for (const i of instancias) if (iguaisSeguro(token, i.token) && achada === undefined) achada = i;
+  return achada;
+}

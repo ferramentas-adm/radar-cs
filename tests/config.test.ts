@@ -1,25 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { ErroConfig, lerConfig } from '../src/config.js';
-import { SEGREDO, TOKEN } from './fixtures/payloads.js';
+import { SEGREDO, TOKEN, TOKEN_RONI } from './fixtures/payloads.js';
 
 const base = { WEBHOOK_SEGREDO: SEGREDO, UAZAPI_INSTANCE_TOKEN: TOKEN };
 const ler = (env: Record<string, string>, exigirBanco = false) => lerConfig(env, { exigirBanco });
 
 describe('lerConfig', () => {
-  it('DESCOBERTA_GUARDAR_TEXTO: ausente, vazio ou "false" = false', () => {
-    expect(ler(base).guardarTexto).toBe(false);
-    expect(ler({ ...base, DESCOBERTA_GUARDAR_TEXTO: '' }).guardarTexto).toBe(false);
-    expect(ler({ ...base, DESCOBERTA_GUARDAR_TEXTO: 'false' }).guardarTexto).toBe(false);
-  });
-
-  it('DESCOBERTA_GUARDAR_TEXTO: só "true" liga', () => {
-    expect(ler({ ...base, DESCOBERTA_GUARDAR_TEXTO: 'true' }).guardarTexto).toBe(true);
-  });
-
-  it('DESCOBERTA_GUARDAR_TEXTO com valor estranho é erro, não liga em silêncio', () => {
-    expect(() => ler({ ...base, DESCOBERTA_GUARDAR_TEXTO: 'sim' })).toThrow(ErroConfig);
-  });
-
   it('valores padrão', () => {
     const c = ler(base);
     expect(c.porta).toBe(3000);
@@ -50,5 +36,39 @@ describe('lerConfig', () => {
       expect(msg).not.toContain('SECRETA');
       expect(msg).not.toContain('chave-XYZ');
     }
+  });
+});
+
+describe('instâncias', () => {
+  it('só o observador (UAZAPI_INSTANCE_TOKEN)', () => {
+    expect(ler(base).instancias).toEqual([{ nome: 'observador', token: TOKEN, tipo: 'observador' }]);
+  });
+
+  it('RADAR_INSTANCIAS com token por instância; observador opcional', () => {
+    const c = ler({
+      WEBHOOK_SEGREDO: SEGREDO,
+      RADAR_INSTANCIAS: ' Roni_Ramos , roni_ramos',
+      UAZAPI_TOKEN_RONI_RAMOS: TOKEN_RONI,
+    });
+    expect(c.instancias).toEqual([{ nome: 'roni_ramos', token: TOKEN_RONI, tipo: 'pessoa' }]);
+  });
+
+  it('observador e pessoas juntos', () => {
+    const c = ler({ ...base, RADAR_INSTANCIAS: 'roni_ramos', UAZAPI_TOKEN_RONI_RAMOS: TOKEN_RONI });
+    expect(c.instancias.map((i) => `${i.nome}:${i.tipo}`)).toEqual(['observador:observador', 'roni_ramos:pessoa']);
+  });
+
+  it('token da instância faltando: erro com o nome da variável', () => {
+    expect(() => ler({ ...base, RADAR_INSTANCIAS: 'roni_ramos' })).toThrow(/UAZAPI_TOKEN_RONI_RAMOS/);
+  });
+
+  it('nome inválido ou "observador" em RADAR_INSTANCIAS', () => {
+    expect(() => ler({ ...base, RADAR_INSTANCIAS: '../x' })).toThrow(/RADAR_INSTANCIAS/);
+    expect(() => ler({ ...base, RADAR_INSTANCIAS: 'observador' })).toThrow(/RADAR_INSTANCIAS/);
+  });
+
+  it('nenhuma instância: erro', () => {
+    expect(() => ler({ WEBHOOK_SEGREDO: SEGREDO })).toThrow(ErroConfig);
+    expect(() => ler({ WEBHOOK_SEGREDO: SEGREDO })).toThrow(/ao menos uma instância/);
   });
 });

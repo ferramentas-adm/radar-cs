@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { RepositorioEventos } from '../src/repositorio.js';
 import { buildApp, opcoesLogger } from '../src/server.js';
-import { SEGREDO, TEXTO, TOKEN, mensagemTexto } from './fixtures/payloads.js';
+import { GRUPO, SEGREDO, TEXTO, TOKEN, mensagemTexto } from './fixtures/payloads.js';
 
 // Regra inegociável 3: nunca logar o payload (ele carrega o token). Nem o segredo da URL.
 
@@ -14,8 +14,8 @@ async function montarComLog(repo: RepositorioEventos) {
   const pasta = await mkdtemp(join(tmpdir(), 'radar-cs-log-'));
   const { app, fila } = buildApp({
     segredo: SEGREDO,
-    tokenInstancia: TOKEN,
-    guardarTexto: false,
+    instancias: [{ nome: 'observador', token: TOKEN, tipo: 'observador' }],
+    cadastro: { grupoAtivo: (jid) => jid === GRUPO, ehDoTime: () => false },
     repo,
     arquivoPendentes: join(pasta, 'pendentes.jsonl'),
     esperaBaseMs: 1,

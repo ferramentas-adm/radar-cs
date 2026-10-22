@@ -19,8 +19,13 @@ describe('migrations', () => {
     }
   });
 
-  it('time e grupos sem policy (só a service role)', () => {
-    expect(sql).not.toMatch(/create policy \w+ on public\.(time|grupos)\b/i);
+  it('time, grupos e mensagens sem policy (só a service role)', () => {
+    expect(sql).not.toMatch(/create policy \w+ on public\.(time|grupos|mensagens)\b/i);
+  });
+
+  it('mensagens: o banco só aceita o texto mascarado e número só de quem é do time', () => {
+    expect(sql).toContain("texto ~ '^\\[texto omitido: [0-9]+ caracteres\\]$'");
+    expect(sql).toContain("check (autor_tipo = 'time' or autor_numero is null)");
   });
 
   it('configuração: escrita só com eh_admin()', () => {
