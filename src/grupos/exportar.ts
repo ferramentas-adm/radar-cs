@@ -132,6 +132,44 @@ export function gerarCsv(linhas: LinhaGrupo[]): string {
   return `﻿${corpo.join('\r\n')}\r\n`;
 }
 
+/** Nome de instância: vira nome de variável e de arquivo, então só letras, números e _ (nada de ../). */
+export const NOME_INSTANCIA = /^[a-z0-9_]+$/;
+
+export interface Instancia {
+  baseUrl: string;
+  token: string;
+  /** Nome do arquivo de saída dentro de var/. */
+  arquivo: string;
+  /** Nome da variável do token, para mensagens (nunca o valor). */
+  variavelToken: string;
+}
+
+/**
+ * Escolhe a instância pelos argumentos: sem --instancia, UAZAPI_INSTANCE_TOKEN e grupos.csv;
+ * com --instancia ana, UAZAPI_TOKEN_ANA e grupos-ana.csv. O endereço é sempre UAZAPI_BASE_URL.
+ * Erros citam só nomes de variáveis, nunca valores.
+ */
+export function escolherInstancia(argv: string[], env: NodeJS.ProcessEnv): Instancia {
+  const i = argv.indexOf('--instancia');
+  let nome: string | undefined;
+  if (i !== -1) {
+    nome = argv[i + 1]?.trim().toLowerCase();
+    if (!nome || nome.startsWith('--')) throw new Error('Use --instancia NOME (ex.: --instancia ana).');
+    if (!NOME_INSTANCIA.test(nome)) {
+      throw new Error('O nome da instância só pode ter letras sem acento, números e _.');
+    }
+  }
+
+  const variavelToken = nome ? `UAZAPI_TOKEN_${nome.toUpperCase()}` : 'UAZAPI_INSTANCE_TOKEN';
+  const token = env[variavelToken]?.trim();
+  if (!token) throw new Error(`Falta ${variavelToken} no .env.`);
+
+  const baseUrl = env.UAZAPI_BASE_URL?.trim().replace(/\/+$/, '');
+  if (!baseUrl || !URL.canParse(baseUrl)) throw new Error('Falta UAZAPI_BASE_URL (uma URL) no .env.');
+
+  return { baseUrl, token, arquivo: nome ? `grupos-${nome}.csv` : 'grupos.csv', variavelToken };
+}
+
 /** Única saída para o terminal: contagens, nunca nomes nem números. */
 export function resumo(linhas: LinhaGrupo[], temTime: boolean): string {
   const total = `grupos: ${linhas.length}`;

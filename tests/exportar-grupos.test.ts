@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buscarTodosGrupos,
   chaveTelefone,
+  escolherInstancia,
   gerarCsv,
   lerTimeCsv,
   montarLinhas,
@@ -151,5 +152,55 @@ describe('montarLinhas e gerarCsv', () => {
     expect(s).toBe('grupos: 3 · com alguém do time: 2');
     for (const proibido of ['Cliente', 'Ana', 'Bruno', '5511', '@g.us']) expect(s).not.toContain(proibido);
     expect(resumo(linhas, false)).toContain('var/time.csv não encontrado');
+  });
+});
+
+describe('escolherInstancia', () => {
+  const env = {
+    UAZAPI_BASE_URL: 'https://uazapi.teste/',
+    UAZAPI_INSTANCE_TOKEN: 'token-padrao-secreto',
+    UAZAPI_TOKEN_ANA: 'token-ana-secreto',
+  };
+  const argv = (...a: string[]) => ['node', 'exportar-grupos.ts', ...a];
+
+  it('sem --instancia: UAZAPI_INSTANCE_TOKEN e grupos.csv', () => {
+    expect(escolherInstancia(argv(), env)).toEqual({
+      baseUrl: 'https://uazapi.teste',
+      token: 'token-padrao-secreto',
+      arquivo: 'grupos.csv',
+      variavelToken: 'UAZAPI_INSTANCE_TOKEN',
+    });
+  });
+
+  it('com --instancia ana: UAZAPI_TOKEN_ANA e grupos-ana.csv (aceita maiúsculas no argumento)', () => {
+    for (const nome of ['ana', 'Ana']) {
+      expect(escolherInstancia(argv('--instancia', nome, '--sobrescrever'), env)).toEqual({
+        baseUrl: 'https://uazapi.teste',
+        token: 'token-ana-secreto',
+        arquivo: 'grupos-ana.csv',
+        variavelToken: 'UAZAPI_TOKEN_ANA',
+      });
+    }
+  });
+
+  it('variável da instância ausente: erro com o nome da variável, sem valores', () => {
+    const erro = () => escolherInstancia(argv('--instancia', 'bruno'), env);
+    expect(erro).toThrow('Falta UAZAPI_TOKEN_BRUNO no .env.');
+    try {
+      erro();
+    } catch (e) {
+      for (const v of Object.values(env)) expect((e as Error).message).not.toContain(v);
+    }
+  });
+
+  it('recusa nome vazio, outra opção no lugar do nome e caminhos', () => {
+    expect(() => escolherInstancia(argv('--instancia'), env)).toThrow('--instancia NOME');
+    expect(() => escolherInstancia(argv('--instancia', '--sobrescrever'), env)).toThrow('--instancia NOME');
+    expect(() => escolherInstancia(argv('--instancia', '../x'), env)).toThrow('só pode ter');
+    expect(() => escolherInstancia(argv('--instancia', 'ana-2'), env)).toThrow('só pode ter');
+  });
+
+  it('sem UAZAPI_BASE_URL: erro claro', () => {
+    expect(() => escolherInstancia(argv(), { UAZAPI_INSTANCE_TOKEN: 'x' })).toThrow('UAZAPI_BASE_URL');
   });
 });
