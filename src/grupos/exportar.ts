@@ -120,7 +120,7 @@ export function montarLinhas(grupos: Grupo[], time: MembroTime[]): LinhaGrupo[] 
 const COLUNAS: (keyof LinhaGrupo)[] = ['nome', 'jid', 'qtd_membros', 'time_no_grupo', 'especialista', 'gestor'];
 
 // Excel: texto que começa com = + - @ vira fórmula; o apóstrofo força texto.
-function celula(valor: string | number): string {
+export function celula(valor: string | number): string {
   let s = String(valor);
   if (typeof valor === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;

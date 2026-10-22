@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { jidDoGrupo, normalizarMensagem } from '../src/mensagens/normalizar.js';
-import { GRUPO, NUMERO_CLIENTE, NUMERO_TIME, TEXTO, mensagemGrupo } from './fixtures/payloads.js';
+import { GRUPO, NUMERO_CLIENTE, NUMERO_TIME, TEXTO, mensagemGrupo, mensagemPrivada } from './fixtures/payloads.js';
 
 const RONI = { nome: 'roni_ramos', tipo: 'pessoa' } as const;
 const OBSERVADOR = { nome: 'observador', tipo: 'observador' } as const;
@@ -97,6 +97,28 @@ describe('normalizarMensagem: datas e descartes', () => {
 
   it('mesma mensagem duas vezes (ou por duas instâncias): mesmo id_mensagem para o dedupe do banco', () => {
     expect(normalizar()?.id_mensagem).toBe(normalizar({}, OBSERVADOR)?.id_mensagem);
+  });
+});
+
+describe('normalizarMensagem: conversa privada', () => {
+  const JID = `privada:${'c'.repeat(64)}`;
+  const privada = (sobre: Record<string, unknown> = {}) =>
+    normalizarMensagem(mensagemPrivada(sobre), RONI, ehDoTime, RECEBIDO, JID);
+
+  it('usa o jid do cadastrador (nunca o chatid); cliente sem número', () => {
+    expect(privada()).toMatchObject({ jid: JID, autor_tipo: 'cliente', autor_numero: null, conta: true });
+    expect(JSON.stringify(privada())).not.toContain(NUMERO_CLIENTE);
+  });
+
+  it('fromMe na instância da pessoa: time', () => {
+    expect(privada({ fromMe: true, sender_pn: `${NUMERO_TIME}@s.whatsapp.net` })).toMatchObject({
+      autor_tipo: 'time',
+      autor_numero: NUMERO_TIME,
+    });
+  });
+
+  it('sem o jid do cadastrador, privada não normaliza', () => {
+    expect(normalizarMensagem(mensagemPrivada(), RONI, ehDoTime, RECEBIDO)).toBeUndefined();
   });
 });
 

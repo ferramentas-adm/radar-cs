@@ -1,4 +1,6 @@
-// Passo 2b: importa var/time.csv (nome;numero) para a tabela time.
+// Passo 2b: importa var/time.csv (nome;numero, e opcionais instancia;gestor) para a tabela time.
+// instancia = nome da instância uazapi do número corporativo da pessoa (como em RADAR_INSTANCIAS);
+// gestor = gestor padrão das conversas que essa instância cadastrar sozinha.
 // Uso: npm run time:importar               (simulação: lê o banco, não grava)
 //      npm run time:importar -- --gravar
 // O terminal só mostra contagens e erros por número de linha (nunca nomes nem telefones).
@@ -28,7 +30,7 @@ try {
   process.exit(1);
 }
 
-const { data, error } = await db.from('time').select('nome, numero');
+const { data, error } = await db.from('time').select('nome, numero, instancia, gestor_padrao');
 if (error) throw new Error(`supabase: ${error.message}`);
 const plano = planejarTime(texto, (data ?? []) as MembroTimeBanco[]);
 

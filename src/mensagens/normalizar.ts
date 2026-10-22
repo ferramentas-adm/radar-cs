@@ -1,4 +1,4 @@
-// Normalizador: evento "messages" da uazapi → linha de public.mensagens. Função pura.
+// Normalizador: evento "messages" da uazapi (grupo ou privada) → linha de public.mensagens. Função pura.
 // Formato dos campos em docs/descoberta-uazapi.md (sender é @lid; o número vem em sender_pn).
 import type { InstanciaConfig } from '../config.js';
 import { mascararTexto } from '../webhook/sanitizar.js';
@@ -48,15 +48,17 @@ export function jidDoGrupo(payload: unknown): string | undefined {
 
 /**
  * Devolve a mensagem normalizada, ou undefined quando não deve ser gravada (não é mensagem de
- * grupo, falta messageid, ou é do próprio observador).
+ * conversa, falta messageid, ou é do próprio observador). jidConversa vem do cadastrador: na
+ * privada é o 'privada:<hash>', nunca o chatid; sem ele, só mensagem de grupo é normalizada.
  */
 export function normalizarMensagem(
   payload: unknown,
   instancia: Pick<InstanciaConfig, 'nome' | 'tipo'>,
   ehDoTime: (numero: string) => boolean,
   recebidoEm: string,
+  jidConversa?: string,
 ): MensagemNormalizada | undefined {
-  const jid = jidDoGrupo(payload);
+  const jid = objeto(payload)?.EventType === 'messages' ? (jidConversa ?? jidDoGrupo(payload)) : undefined;
   const msg = objeto(objeto(payload)?.message);
   const id = texto(msg?.messageid);
   if (!jid || !msg || id === '') return undefined;

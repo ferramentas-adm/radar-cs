@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { NOME_INSTANCIA } from './grupos/exportar.js';
+import { lerChave, type ChavesConversa } from './conversas/chave.js';
+import { chaveTelefone, NOME_INSTANCIA } from './grupos/exportar.js';
 
 // Configuração do backend, lida do ambiente (.env). Nunca imprime valores: segredos só no servidor.
 
@@ -24,6 +25,10 @@ export interface Config {
   supabase: { url: string; serviceRoleKey: string } | undefined;
   /** Autenticação básica da página e da API (obrigatória quando há banco). */
   painel: { usuario: string; senha: string } | undefined;
+  /** Chaves da conversa privada (obrigatórias quando há banco). */
+  chaves: ChavesConversa | undefined;
+  /** Chave de telefone do número observador (ignorado ao classificar grupo interno). */
+  observadorNumero: string | undefined;
 }
 
 export class ErroConfig extends Error {
@@ -47,6 +52,9 @@ const esquema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: opcional(z.string().min(1)),
   PAINEL_USUARIO: opcional(z.string().min(1).regex(/^[^:]+$/)),
   PAINEL_SENHA: opcional(z.string().min(16)),
+  RADAR_CHAVE_CONVERSA: opcional(z.string().refine((v) => lerChave(v) !== undefined)),
+  RADAR_CHAVE_CIFRA: opcional(z.string().refine((v) => lerChave(v) !== undefined)),
+  OBSERVADOR_NUMERO: opcional(z.string().regex(/^\+?[0-9 ()-]{12,}$/)),
 });
 
 const DESCRICAO: Record<string, string> = {
@@ -60,6 +68,9 @@ const DESCRICAO: Record<string, string> = {
   SUPABASE_SERVICE_ROLE_KEY: 'inválido',
   PAINEL_USUARIO: 'inválido (não pode ter ":")',
   PAINEL_SENHA: 'precisa ter pelo menos 16 caracteres',
+  RADAR_CHAVE_CONVERSA: 'precisa ser Base64 de 32 bytes (44 caracteres; veja o comando no .env.example)',
+  RADAR_CHAVE_CIFRA: 'precisa ser Base64 de 32 bytes (44 caracteres; veja o comando no .env.example)',
+  OBSERVADOR_NUMERO: 'precisa ser 55 + DDD + número',
 };
 
 /** Instâncias do .env. Problemas citam só nomes de variáveis. */
@@ -105,6 +116,15 @@ export function lerConfig(env: NodeJS.ProcessEnv, opcoes: { exigirBanco: boolean
     // Com banco o painel sobe junto, e a URL do túnel é pública.
     if (!env.PAINEL_USUARIO?.trim()) problemas.push('PAINEL_USUARIO: obrigatório (ou rode com --sem-banco)');
     if (!env.PAINEL_SENHA?.trim()) problemas.push('PAINEL_SENHA: obrigatório (ou rode com --sem-banco)');
+    // Sem as chaves, conversa privada não tem como ser cadastrada sem expor o número.
+    for (const nome of ['RADAR_CHAVE_CONVERSA', 'RADAR_CHAVE_CIFRA']) {
+      if (!env[nome]?.trim()) problemas.push(`${nome}: obrigatório (ou rode com --sem-banco)`);
+    }
+  }
+  const conversa = lerChave(env.RADAR_CHAVE_CONVERSA);
+  const cifra = lerChave(env.RADAR_CHAVE_CIFRA);
+  if (conversa && cifra && conversa.equals(cifra)) {
+    problemas.push('RADAR_CHAVE_CIFRA: precisa ser diferente de RADAR_CHAVE_CONVERSA');
   }
   if (problemas.length > 0 || !r.success) {
     throw new ErroConfig(`Configuração inválida no .env:\n- ${[...new Set(problemas)].join('\n- ')}`);
@@ -123,5 +143,7 @@ export function lerConfig(env: NodeJS.ProcessEnv, opcoes: { exigirBanco: boolean
         : undefined,
     painel:
       e.PAINEL_USUARIO && e.PAINEL_SENHA ? { usuario: e.PAINEL_USUARIO, senha: e.PAINEL_SENHA } : undefined,
+    chaves: conversa && cifra ? { conversa, cifra } : undefined,
+    observadorNumero: e.OBSERVADOR_NUMERO ? chaveTelefone(e.OBSERVADOR_NUMERO) : undefined,
   };
 }

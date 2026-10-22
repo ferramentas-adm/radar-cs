@@ -7,13 +7,13 @@ import { criarClienteSupabase } from './db/supabase.js';
 import { carregarEnv } from './env.js';
 import { EstadoInstancias } from './instancias/estado.js';
 import { calcular } from './motor/calcular.js';
-import { RepositorioArquivo, RepositorioSupabase } from './repositorio.js';
+import { gravarConversaSupabase, RepositorioArquivo, RepositorioSupabase } from './repositorio.js';
 import { buildApp } from './server.js';
 import { ClienteUazapi } from './uazapi/cliente.js';
 
 // Sobe o backend: receptor do webhook e, com banco, o painel (GET / e GET /api/radar).
-// Com --sem-banco grava em var/eventos-dev.jsonl, sem painel; sem cadastro nenhum grupo passa
-// pelo filtro, então serve só para testar a rota e o token.
+// Com --sem-banco grava em var/eventos-dev.jsonl, sem painel e sem cadastro automático: nenhuma
+// conversa passa pelo filtro, então serve só para testar a rota e o token.
 
 const ARQUIVO_PENDENTES = 'var/eventos-pendentes.jsonl';
 const ARQUIVO_DEV = 'var/eventos-dev.jsonl';
@@ -42,7 +42,7 @@ async function main(): Promise<void> {
   // O log do cadastro usa o logger do app, que só existe depois do buildApp.
   let app: FastifyInstance | undefined;
   const cadastro = new CacheCadastro(
-    db ? carregadorSupabase(db) : async () => ({ gruposAtivos: [], numerosTime: [] }),
+    db ? carregadorSupabase(db) : async () => ({ conversas: [], time: [] }),
     {
       info: (obj, msg) => app?.log.info(obj, msg),
       warn: (obj, msg) => app?.log.warn(obj, msg),
@@ -67,6 +67,22 @@ async function main(): Promise<void> {
         }
       : undefined;
 
+  // Cadastro automático: só com banco. /group/info pela instância que viu o grupo.
+  const baseUrl = config.uazapiBaseUrl;
+  const clientes = new Map(
+    baseUrl ? config.instancias.map((i) => [i.nome, new ClienteUazapi(baseUrl, i.token)] as const) : [],
+  );
+  const conversas = db
+    ? {
+        chaves: config.chaves,
+        observadorNumero: config.observadorNumero,
+        consultarParticipantes: baseUrl
+          ? (instancia: string, jid: string) => clientes.get(instancia)!.participantesDoGrupo(jid)
+          : undefined,
+        gravarConversa: gravarConversaSupabase(db),
+      }
+    : undefined;
+
   const montado = buildApp({
     segredo: config.webhookSegredo,
     instancias: config.instancias,
@@ -75,6 +91,7 @@ async function main(): Promise<void> {
     arquivoPendentes: ARQUIVO_PENDENTES,
     estado,
     ...(painel ? { painel } : {}),
+    ...(conversas ? { conversas } : {}),
   });
   app = montado.app;
   const { fila } = montado;
@@ -83,13 +100,19 @@ async function main(): Promise<void> {
   await cadastro.atualizar();
   cadastro.iniciar(RECARGA_CADASTRO_MS);
 
+  // Instância de pessoa sem dono em time.instancia não cadastra conversa nova (só o nome da instância).
+  const semDono = config.instancias.filter((i) => i.tipo === 'pessoa' && !cadastro.responsavel(i.nome));
+  if (semDono.length > 0) {
+    app.log.warn({ instancias: semDono.map((i) => i.nome) }, 'instância sem dono em time.instancia: não cadastra conversa nova');
+  }
+
   // Status das instâncias: além dos eventos "connection", consulta /instance/status de cada uma.
-  const baseUrl = config.uazapiBaseUrl;
   const consultarStatus = async () => {
     for (const i of config.instancias) {
-      if (!baseUrl) break;
+      const cliente = clientes.get(i.nome);
+      if (!cliente) break;
       try {
-        const { status } = await new ClienteUazapi(baseUrl, i.token).instanceStatus();
+        const { status } = await cliente.instanceStatus();
         estado.registrar(i.nome, status, Date.now());
       } catch (e) {
         // Sem resposta da uazapi não dá para afirmar que está conectada.
@@ -98,7 +121,12 @@ async function main(): Promise<void> {
       }
     }
   };
-  if (!baseUrl) app.log.warn('sem UAZAPI_BASE_URL: status das instâncias só pelos eventos do webhook');
+  if (!baseUrl) {
+    app.log.warn(
+      'sem UAZAPI_BASE_URL: status das instâncias só pelos eventos do webhook, e grupo novo em que o time ' +
+        'escreveu primeiro não é cadastrado (falta a consulta de participantes)',
+    );
+  }
   await consultarStatus();
   const timerStatus = setInterval(() => void consultarStatus(), CONSULTA_STATUS_MS);
   timerStatus.unref();

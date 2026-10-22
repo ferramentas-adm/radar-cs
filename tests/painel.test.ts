@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { autenticar, injetarConfig } from '../src/api/painel.js';
 import { calcular, type RespostaRadar } from '../src/motor/calcular.js';
 import { buildApp } from '../src/server.js';
+import { cadastroFixo } from './fixtures/cadastro.js';
 import { GRUPO, SEGREDO, TOKEN } from './fixtures/payloads.js';
 
 const USUARIO = 'piloto';
@@ -32,7 +33,7 @@ async function montar(radar: (u: string) => Promise<RespostaRadar> = async () =>
   const { app } = buildApp({
     segredo: SEGREDO,
     instancias: [{ nome: 'observador', token: TOKEN, tipo: 'observador' }],
-    cadastro: { grupoAtivo: () => false, ehDoTime: () => false },
+    cadastro: cadastroFixo(),
     repo: { gravar: async () => {} },
     arquivoPendentes: join(pasta, 'pendentes.jsonl'),
     logger: false,

@@ -4,10 +4,14 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Cadastro } from '../src/cadastro.js';
 import type { InstanciaConfig } from '../src/config.js';
+import type { NovaConversa } from '../src/conversas/cadastrador.js';
+import { decifrar } from '../src/conversas/chave.js';
 import { EstadoInstancias } from '../src/instancias/estado.js';
 import type { EventoBruto, RepositorioEventos } from '../src/repositorio.js';
-import { buildApp } from '../src/server.js';
+import { buildApp, type DepsApp } from '../src/server.js';
+import { CHAVES, cadastroFixo } from './fixtures/cadastro.js';
 import {
+  CHAT_PRIVADO,
   GRUPO,
   NUMERO_CLIENTE,
   NUMERO_TIME,
@@ -17,6 +21,7 @@ import {
   TOKEN_RONI,
   eventoConexao,
   mensagemGrupo,
+  mensagemPrivada,
 } from './fixtures/payloads.js';
 
 const proximoTique = () => new Promise<void>((r) => setImmediate(r));
@@ -26,10 +31,9 @@ const INSTANCIAS: InstanciaConfig[] = [
   { nome: 'roni_ramos', token: TOKEN_RONI, tipo: 'pessoa' },
 ];
 
-const CADASTRO: Cadastro = {
-  grupoAtivo: (jid) => jid === GRUPO,
-  ehDoTime: (n) => n.replace(/\D/g, '') === NUMERO_TIME,
-};
+// Grupo cadastrado e número do time; sem cadastro automático (sem DepsApp.conversas).
+const novoCadastro = () => cadastroFixo({ ativas: [GRUPO], time: [NUMERO_TIME] });
+const CADASTRO: Cadastro = novoCadastro();
 
 class RepoMemoria implements RepositorioEventos {
   gravados: EventoBruto[] = [];
@@ -38,17 +42,18 @@ class RepoMemoria implements RepositorioEventos {
   }
 }
 
-async function montar(repo: RepositorioEventos) {
+async function montar(repo: RepositorioEventos, extra: Partial<DepsApp> = {}) {
   const pasta = await mkdtemp(join(tmpdir(), 'radar-cs-'));
   const arquivoPendentes = join(pasta, 'pendentes.jsonl');
   const { app, fila } = buildApp({
     segredo: SEGREDO,
     instancias: INSTANCIAS,
-    cadastro: CADASTRO,
+    cadastro: novoCadastro(),
     repo,
     arquivoPendentes,
     esperaBaseMs: 1,
     logger: false,
+    ...extra,
   });
   return { app, fila, arquivoPendentes };
 }
@@ -124,7 +129,7 @@ describe('filtro na chegada', () => {
     expect(tudo).toContain(`[texto omitido: ${TEXTO.length} caracteres]`);
   });
 
-  it('conversa privada: 200 e nada gravado', async () => {
+  it('conversa privada sem cadastro automático: 200 e nada gravado', async () => {
     const privada = mensagemGrupo({ isGroup: false, chatid: `${NUMERO_CLIENTE}@s.whatsapp.net` });
     expect(await enviar(privada)).toEqual({ status: 200, gravados: [] });
   });
@@ -169,6 +174,134 @@ describe('filtro na chegada', () => {
   it('fromMe na instância de uma pessoa: mensagem do time', async () => {
     const r = await enviar(mensagemGrupo({ fromMe: true, sender_pn: `${NUMERO_TIME}@s.whatsapp.net` }));
     expect(r.gravados[0]?.mensagem).toMatchObject({ autor_tipo: 'time', autor_numero: NUMERO_TIME });
+  });
+});
+
+describe('cadastro automático (todas as conversas, exceto as internas)', () => {
+  const DONO = { especialista: 'Roni Ramos', gestor: 'Gestora X' };
+  const GRUPO_NOVO = '120363040009999@g.us';
+
+  async function montarAuto(o: { bloqueadas?: string[]; participantes?: () => Promise<{ PhoneNumber?: string }[]> } = {}) {
+    const repo = new RepoMemoria();
+    const cadastradas: NovaConversa[] = [];
+    const consultas: string[] = [];
+    const cadastro = cadastroFixo({
+      ativas: [GRUPO],
+      bloqueadas: o.bloqueadas ?? [],
+      time: [NUMERO_TIME],
+      donos: { roni_ramos: DONO },
+    });
+    const { app, fila } = await montar(repo, {
+      cadastro,
+      conversas: {
+        chaves: CHAVES,
+        consultarParticipantes: async (_i, jid) => {
+          consultas.push(jid);
+          return (o.participantes ?? (async () => [{ PhoneNumber: NUMERO_TIME }]))();
+        },
+        gravarConversa: async (c) => {
+          cadastradas.push(c);
+          return true;
+        },
+      },
+    });
+    const enviarAuto = async (corpo: unknown) => {
+      await post(app, SEGREDO, corpo);
+      await proximoTique();
+      await fila.esvaziar();
+    };
+    return { repo, cadastradas, consultas, cadastro, enviarAuto };
+  }
+
+  it('privada de cliente: cadastra sem nome, com jid opaco e chatid cifrado; grava a mensagem sem número', async () => {
+    const { repo, cadastradas, enviarAuto } = await montarAuto();
+    await enviarAuto(mensagemPrivada());
+    expect(cadastradas).toHaveLength(1);
+    const c = cadastradas[0]!;
+    expect(c).toMatchObject({ tipo: 'privada', nome: null, especialista: 'Roni Ramos', gestor: 'Gestora X', instancia: 'roni_ramos', origem: 'automatico', observador_entrou_em: null });
+    expect(c.jid).toMatch(/^privada:[0-9a-f]{64}$/);
+    expect(c.chat_cifrado).not.toContain(NUMERO_CLIENTE);
+    expect(decifrar(c.chat_cifrado!, CHAVES.cifra)).toBe(CHAT_PRIVADO);
+
+    expect(repo.gravados).toHaveLength(1);
+    const g = repo.gravados[0]!;
+    expect(g.mensagem).toMatchObject({ jid: c.jid, autor_tipo: 'cliente', autor_numero: null, conta: true });
+    const tudo = JSON.stringify(g);
+    expect(tudo).not.toContain(NUMERO_CLIENTE);
+    expect(tudo).not.toContain('Contato Cliente');
+    expect(tudo).not.toContain(TEXTO);
+  });
+
+  it('privada: a segunda mensagem usa a conversa já cadastrada; resposta do especialista é do time', async () => {
+    const { repo, cadastradas, enviarAuto } = await montarAuto();
+    await enviarAuto(mensagemPrivada());
+    // sender_lid fica com o LID do cliente de propósito: o número do chatid decide, não o LID.
+    await enviarAuto(mensagemPrivada({ messageid: 'R2', fromMe: true, sender_pn: `${NUMERO_TIME}@s.whatsapp.net` }));
+    expect(cadastradas).toHaveLength(1);
+    expect(repo.gravados.map((g) => g.mensagem?.autor_tipo)).toEqual(['cliente', 'time']);
+    expect(repo.gravados[1]!.mensagem?.jid).toBe(cadastradas[0]!.jid);
+  });
+
+  it('privada com alguém do time (interna): nada cadastrado nem gravado', async () => {
+    const { repo, cadastradas, enviarAuto } = await montarAuto();
+    const chat = `${NUMERO_TIME}@s.whatsapp.net`;
+    await enviarAuto(mensagemPrivada({ chatid: chat, sender_pn: chat }));
+    expect([cadastradas, repo.gravados]).toEqual([[], []]);
+  });
+
+  it('privada no observador: nada (ninguém conversa por ele)', async () => {
+    const { repo, cadastradas, enviarAuto } = await montarAuto();
+    await enviarAuto(mensagemPrivada({}, TOKEN));
+    expect([cadastradas, repo.gravados]).toEqual([[], []]);
+  });
+
+  it('grupo novo em que o cliente escreveu: cadastra sem consultar a uazapi', async () => {
+    const { repo, cadastradas, consultas, enviarAuto } = await montarAuto();
+    await enviarAuto(mensagemGrupo({ chatid: GRUPO_NOVO }));
+    expect(consultas).toEqual([]);
+    expect(cadastradas[0]).toMatchObject({ jid: GRUPO_NOVO, tipo: 'grupo', nome: 'Cliente Teste | Grupo Silva', chat_cifrado: null });
+    expect(cadastradas[0]!.observador_entrou_em).toBe(new Date(1792512000000).toISOString());
+    expect(repo.gravados[0]?.mensagem?.jid).toBe(GRUPO_NOVO);
+  });
+
+  it('grupo novo só com o time (interno): consulta uma vez, não grava nada', async () => {
+    const { repo, cadastradas, consultas, enviarAuto } = await montarAuto();
+    const doTime = { chatid: GRUPO_NOVO, sender_pn: `${NUMERO_TIME}@s.whatsapp.net` };
+    await enviarAuto(mensagemGrupo(doTime));
+    await enviarAuto(mensagemGrupo({ ...doTime, messageid: 'X2' }));
+    expect(consultas).toEqual([GRUPO_NOVO]); // a decisão fica em cache
+    expect([cadastradas, repo.gravados]).toEqual([[], []]);
+  });
+
+  it('consulta falhou: não grava; a próxima mensagem tenta de novo', async () => {
+    let falhar = true;
+    const { repo, cadastradas, consultas, enviarAuto } = await montarAuto({
+      participantes: async () => {
+        if (falhar) throw new Error('uazapi /group/info: HTTP 500');
+        return [{ PhoneNumber: NUMERO_TIME }, { PhoneNumber: NUMERO_CLIENTE }];
+      },
+    });
+    const doTime = { chatid: GRUPO_NOVO, sender_pn: `${NUMERO_TIME}@s.whatsapp.net` };
+    await enviarAuto(mensagemGrupo(doTime));
+    expect([cadastradas, repo.gravados]).toEqual([[], []]);
+    falhar = false;
+    await enviarAuto(mensagemGrupo({ ...doTime, messageid: 'X2' }));
+    expect(consultas).toHaveLength(2);
+    expect(cadastradas).toHaveLength(1);
+    expect(repo.gravados.map((g) => g.id_mensagem)).toEqual(['X2']);
+  });
+
+  it('conversa bloqueada (ativo = false): nada gravado e não é recadastrada', async () => {
+    const { repo, cadastradas, enviarAuto } = await montarAuto({ bloqueadas: [GRUPO_NOVO] });
+    await enviarAuto(mensagemGrupo({ chatid: GRUPO_NOVO }));
+    expect([cadastradas, repo.gravados]).toEqual([[], []]);
+  });
+
+  it('grupo já cadastrado (importado) não passa pelo cadastro', async () => {
+    const { repo, cadastradas, enviarAuto } = await montarAuto();
+    await enviarAuto(mensagemGrupo());
+    expect(cadastradas).toEqual([]);
+    expect(repo.gravados).toHaveLength(1);
   });
 });
 

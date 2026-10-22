@@ -28,6 +28,11 @@ describe('migrations', () => {
     expect(sql).toContain("check (autor_tipo = 'time' or autor_numero is null)");
   });
 
+  it('grupos: privada só com jid opaco, chatid cifrado e sem nome', () => {
+    expect(sql).toContain("jid ~ '^privada:[0-9a-f]{64}$'");
+    expect(sql).toMatch(/tipo = 'privada'[\s\S]*chat_cifrado is not null[\s\S]*nome is null/);
+  });
+
   it('configuração: escrita só com eh_admin()', () => {
     const escrita = [...sql.matchAll(/create policy \w+ on public\.(\w+)\s+for (insert|update|delete)[^;]*;/gi)];
     expect(escrita.length).toBeGreaterThan(0);

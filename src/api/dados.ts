@@ -14,7 +14,12 @@ function falhou(tabela: string, erro: { message: string } | null): void {
 
 export async function carregarDadosRadar(db: SupabaseClient): Promise<DadosRadar> {
   const [grupos, expediente, feriados, prazo, ultima] = await Promise.all([
-    db.from('grupos').select('jid, nome, especialista, gestor, ativo, observador_entrou_em').eq('ativo', true),
+    // Conversa privada nunca vira linha do painel (os números por especialista vêm na fase B).
+    db
+      .from('grupos')
+      .select('jid, nome, especialista, gestor, ativo, observador_entrou_em')
+      .eq('ativo', true)
+      .eq('tipo', 'grupo'),
     db.from('config_expediente').select('hora_inicio, hora_fim, dias_uteis, fuso').single(),
     db.from('feriados').select('data'),
     db.from('prazos_urgencia').select('minutos_aviso, minutos_gestor').eq('urgencia', 'medio').single(),

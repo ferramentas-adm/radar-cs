@@ -20,6 +20,25 @@ export function sanitizarPayload(payload: unknown, opcoes: { guardarTexto: boole
   return limpar(payload, opcoes.guardarTexto);
 }
 
+// Campos de message que ficam no bruto da conversa privada: nada que identifique o cliente.
+const CAMPOS_PRIVADA = ['messageid', 'messageType', 'mediaType', 'fromMe', 'isGroup', 'messageTimestamp', 'text'];
+
+/**
+ * Bruto da conversa privada: só uma lista fechada de campos, com o texto mascarado. Fora chatid,
+ * sender, sender_pn, senderName e o resto, que carregam o número ou o nome do cliente.
+ */
+export function sanitizarPayloadPrivada(payload: unknown): unknown {
+  const raiz = (payload ?? {}) as Record<string, unknown>;
+  const msg = (raiz.message ?? {}) as Record<string, unknown>;
+  const message: Record<string, unknown> = {};
+  for (const c of CAMPOS_PRIVADA) {
+    const v = msg[c];
+    if (v === undefined) continue;
+    message[c] = c === 'text' && typeof v === 'string' ? mascararTexto(v) : v;
+  }
+  return { EventType: raiz.EventType, message };
+}
+
 function limpar(valor: unknown, guardarTexto: boolean): unknown {
   if (Array.isArray(valor)) return valor.map((v) => limpar(v, guardarTexto));
   if (valor === null || typeof valor !== 'object') return valor;

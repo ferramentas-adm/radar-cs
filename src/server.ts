@@ -3,6 +3,7 @@ import { registrarPainel, type DepsPainel } from './api/painel.js';
 import type { Cadastro } from './cadastro.js';
 import type { EstadoInstancias } from './instancias/estado.js';
 import type { InstanciaConfig } from './config.js';
+import { Cadastrador, type DepsCadastrador } from './conversas/cadastrador.js';
 import type { RepositorioEventos } from './repositorio.js';
 import { FilaGravacao } from './webhook/fila.js';
 import { PREFIXO_WEBHOOK, registrarWebhook } from './webhook/rota.js';
@@ -23,6 +24,8 @@ export interface DepsApp {
   estado?: EstadoInstancias;
   /** Página e GET /api/radar. Sem isto, só o receptor do webhook. */
   painel?: DepsPainel;
+  /** Cadastro automático (chaves, /group/info, gravação). Sem isto, só conversas já cadastradas passam. */
+  conversas?: Omit<DepsCadastrador, 'cadastro' | 'log'>;
 }
 
 /** Troca o segredo da URL do webhook por *** antes de qualquer log. */
@@ -67,6 +70,7 @@ export function buildApp(deps: DepsApp): { app: FastifyInstance; fila: FilaGrava
     segredo: deps.segredo,
     instancias: deps.instancias,
     cadastro: deps.cadastro,
+    conversas: new Cadastrador({ ...deps.conversas, cadastro: deps.cadastro, log: app.log }),
     fila,
     ...(deps.estado ? { estado: deps.estado } : {}),
   });

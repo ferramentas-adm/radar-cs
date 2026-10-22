@@ -43,6 +43,12 @@ export class FilaGravacao {
     this.emAndamento.add(p);
   }
 
+  /** Trabalho anterior à gravação (classificar e cadastrar a conversa), para esvaziar() esperar. */
+  acompanhar(trabalho: Promise<void>): void {
+    const p = trabalho.catch(() => {}).finally(() => this.emAndamento.delete(p));
+    this.emAndamento.add(p);
+  }
+
   /** Espera tudo o que já foi enfileirado terminar (gravado ou salvo no arquivo de pendentes). */
   async esvaziar(): Promise<void> {
     while (this.emAndamento.size > 0) await Promise.allSettled([...this.emAndamento]);

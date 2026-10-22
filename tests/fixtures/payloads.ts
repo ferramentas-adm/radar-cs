@@ -51,6 +51,37 @@ export const NUMERO_CLIENTE = '5511988887777';
 export const NUMERO_TIME = '5511977776666';
 export const TOKEN_RONI = 'tok-roni-SECRETO-9876543210';
 
+// Conversa privada: formato suposto (ainda não confirmado com payload real), mesmos campos do grupo.
+export const CHAT_PRIVADO = `${NUMERO_CLIENTE}@s.whatsapp.net`;
+export const LID_CLIENTE = '222222222222222@lid';
+
+export function mensagemPrivada(sobre: Record<string, unknown> = {}, token = TOKEN_RONI) {
+  return {
+    EventType: 'messages',
+    instanceName: 'roni_ramos',
+    token,
+    message: {
+      id: '5511977776666:3EB0CCCC0001',
+      messageid: '3EB0CCCC0001',
+      chatid: CHAT_PRIVADO,
+      chatlid: LID_CLIENTE,
+      sender: LID_CLIENTE,
+      sender_pn: CHAT_PRIVADO,
+      sender_lid: LID_CLIENTE,
+      senderName: 'Contato Cliente',
+      fromMe: false,
+      isGroup: false,
+      messageType: 'Conversation',
+      mediaType: '',
+      text: TEXTO,
+      content: TEXTO,
+      quoted: '',
+      messageTimestamp: 1792512000000,
+      ...sobre,
+    },
+  };
+}
+
 export function mensagemGrupo(sobre: Record<string, unknown> = {}, token = TOKEN_RONI) {
   return {
     EventType: 'messages',

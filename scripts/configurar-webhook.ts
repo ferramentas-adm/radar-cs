@@ -31,9 +31,13 @@ const uazapi = new ClienteUazapi(instancia.baseUrl, instancia.token);
 const { status } = await uazapi.instanceStatus();
 console.log(`instância: ${instancia.variavelToken} (${status})`);
 
+// Observador: só grupos (ninguém conversa por ele). Número de pessoa: grupos e privadas, porque o
+// Radar analisa toda conversa de cliente (as internas o receptor descarta na chegada).
+const observador = instancia.variavelToken === 'UAZAPI_INSTANCE_TOKEN';
 await uazapi.configurarWebhook({
   url: `${urlPublica}${PREFIXO_WEBHOOK}${segredo}`,
   events: ['messages', 'connection'],
-  excludeMessages: ['isGroupNo'], // ignora conversas privadas
+  excludeMessages: observador ? ['isGroupNo'] : [],
 });
+console.log(`conversas privadas: ${observador ? 'ignoradas (observador)' : 'recebidas'}`);
 console.log(`webhook configurado: ${urlPublica}${PREFIXO_WEBHOOK}***`);

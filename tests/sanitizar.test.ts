@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { mascararTexto, sanitizarPayload } from '../src/webhook/sanitizar.js';
-import { TEXTO, TOKEN, mensagemCitada, mensagemTexto } from './fixtures/payloads.js';
+import { mascararTexto, sanitizarPayload, sanitizarPayloadPrivada } from '../src/webhook/sanitizar.js';
+import {
+  LID_CLIENTE,
+  NUMERO_CLIENTE,
+  TEXTO,
+  TOKEN,
+  TOKEN_RONI,
+  mensagemCitada,
+  mensagemPrivada,
+  mensagemTexto,
+} from './fixtures/payloads.js';
 
 const padrao = { guardarTexto: false };
 
@@ -78,5 +87,27 @@ describe('sanitizarPayload: texto mascarado por padrão', () => {
     expect(s.message.text).toBe(TEXTO);
     expect(s.message.content).toBe(TEXTO);
     expect(s).not.toHaveProperty('token');
+  });
+});
+
+describe('sanitizarPayloadPrivada', () => {
+  it('só a lista fechada de campos: sem chatid, números, LID, nome nem texto', () => {
+    const s = sanitizarPayloadPrivada(mensagemPrivada());
+    expect(s).toEqual({
+      EventType: 'messages',
+      message: {
+        messageid: '3EB0CCCC0001',
+        messageType: 'Conversation',
+        mediaType: '',
+        fromMe: false,
+        isGroup: false,
+        messageTimestamp: 1792512000000,
+        text: mascararTexto(TEXTO),
+      },
+    });
+    const tudo = JSON.stringify(s);
+    for (const proibido of [NUMERO_CLIENTE, LID_CLIENTE, 'Contato Cliente', TOKEN_RONI, TEXTO]) {
+      expect(tudo).not.toContain(proibido);
+    }
   });
 });

@@ -1,4 +1,5 @@
-// Contagem das mensagens gravadas nas últimas 24 horas, por grupo, autor e "conta" (sim/não).
+// Contagem das mensagens gravadas nas últimas 24 horas, por grupo, autor e "conta" (sim/não);
+// as conversas privadas somam numa linha só.
 // Uso: npm run mensagens:resumo
 // Só contagens: nunca texto, JID, nome de grupo nem número (os grupos aparecem numerados).
 import { criarClienteSupabase } from '../src/db/supabase.js';
@@ -16,7 +17,7 @@ if (!url || !chave) {
 }
 const db = criarClienteSupabase({ url, serviceRoleKey: chave });
 
-const grupos = await db.from('grupos').select('jid').eq('ativo', true).order('id');
+const grupos = await db.from('grupos').select('jid').eq('ativo', true).eq('tipo', 'grupo').order('id');
 if (grupos.error) throw new Error(`supabase: ${grupos.error.message}`);
 
 const desde = new Date(Date.now() - 24 * 3600_000).toISOString();

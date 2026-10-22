@@ -1,5 +1,6 @@
 // Resumo das mensagens gravadas, para conferir o piloto: só contagens por grupo, por autor e por
 // "conta". Os grupos aparecem numerados ("grupo 1"...), nunca pelo JID ou pelo nome.
+import { PREFIXO_PRIVADA } from '../conversas/chave.js';
 
 export interface LinhaResumo {
   jid: string;
@@ -15,7 +16,10 @@ export interface ContagemGrupo {
   time_nao_conta: number;
 }
 
-/** gruposAtivos na ordem do cadastro; mensagens de grupo fora da lista vão para "outros". */
+/**
+ * gruposAtivos na ordem do cadastro; mensagens de conversa privada somam numa linha só ("conversas
+ * privadas"); mensagens de grupo fora da lista vão para "outros".
+ */
 export function resumirMensagens(gruposAtivos: string[], linhas: LinhaResumo[]): ContagemGrupo[] {
   const zerado = (grupo: string): ContagemGrupo => ({
     grupo,
@@ -25,14 +29,20 @@ export function resumirMensagens(gruposAtivos: string[], linhas: LinhaResumo[]):
     time_nao_conta: 0,
   });
   const porJid = new Map(gruposAtivos.map((jid, i) => [jid, zerado(`grupo ${i + 1}`)]));
+  const privadas = zerado('conversas privadas');
   const outros = zerado('outros (inativos)');
+  const ehPrivada = (jid: string) => jid.startsWith(PREFIXO_PRIVADA);
   for (const l of linhas) {
-    const c = porJid.get(l.jid) ?? outros;
+    const c = porJid.get(l.jid) ?? (ehPrivada(l.jid) ? privadas : outros);
     const campo = `${l.autor_tipo}_${l.conta ? 'conta' : 'nao_conta'}` as const;
     c[campo]++;
   }
   const total = zerado('total');
-  const lista = [...porJid.values(), ...(linhas.some((l) => !porJid.has(l.jid)) ? [outros] : [])];
+  const lista = [
+    ...porJid.values(),
+    ...(linhas.some((l) => ehPrivada(l.jid)) ? [privadas] : []),
+    ...(linhas.some((l) => !porJid.has(l.jid) && !ehPrivada(l.jid)) ? [outros] : []),
+  ];
   for (const c of lista) {
     total.cliente_conta += c.cliente_conta;
     total.cliente_nao_conta += c.cliente_nao_conta;

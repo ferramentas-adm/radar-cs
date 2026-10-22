@@ -84,6 +84,21 @@ export class ClienteUazapi {
     };
   }
 
+  /**
+   * POST /group/info: só os participantes do grupo (para saber se é grupo interno).
+   * Resposta sem lista de participantes é erro: não dá para classificar às cegas.
+   */
+  async participantesDoGrupo(groupjid: string): Promise<ParticipanteGrupo[]> {
+    const r = (await this.chamar('POST', '/group/info', { groupjid })) as Record<string, unknown>;
+    const grupo = (r.group ?? r) as Record<string, unknown>;
+    if (!Array.isArray(grupo.Participants)) throw new Error('uazapi /group/info: resposta sem participantes');
+    return (grupo.Participants as ParticipanteGrupo[]).map((p) => ({
+      ...(typeof p.JID === 'string' ? { JID: p.JID } : {}),
+      ...(typeof p.LID === 'string' ? { LID: p.LID } : {}),
+      ...(typeof p.PhoneNumber === 'string' ? { PhoneNumber: p.PhoneNumber } : {}),
+    }));
+  }
+
   /** POST /webhook: configura para onde a instância entrega os eventos. */
   async configurarWebhook(cfg: ConfigWebhook): Promise<void> {
     await this.chamar('POST', '/webhook', { enabled: true, ...cfg });

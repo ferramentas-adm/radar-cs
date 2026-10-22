@@ -32,6 +32,21 @@ describe('resumirMensagens', () => {
     expect(s).not.toContain('120363');
   });
 
+  it('conversas privadas numa linha só, sem o hash', () => {
+    const p = `privada:${'a'.repeat(64)}`;
+    const q = `privada:${'b'.repeat(64)}`;
+    const r2 = resumirMensagens(
+      [G1],
+      [
+        { jid: p, autor_tipo: 'cliente', conta: true },
+        { jid: q, autor_tipo: 'time', conta: true },
+      ],
+    );
+    expect(r2.map((c) => c.grupo)).toEqual(['grupo 1', 'conversas privadas', 'total']);
+    expect(r2[1]).toMatchObject({ cliente_conta: 1, time_conta: 1 });
+    expect(formatarResumo(r2)).not.toContain('aaaa');
+  });
+
   it('sem "outros" quando todas as mensagens são de grupos ativos', () => {
     expect(resumirMensagens([G1], []).map((c) => c.grupo)).toEqual(['grupo 1', 'total']);
   });

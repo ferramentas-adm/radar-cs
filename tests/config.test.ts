@@ -4,6 +4,10 @@ import { SEGREDO, TOKEN, TOKEN_RONI } from './fixtures/payloads.js';
 
 const base = { WEBHOOK_SEGREDO: SEGREDO, UAZAPI_INSTANCE_TOKEN: TOKEN };
 const ler = (env: Record<string, string>, exigirBanco = false) => lerConfig(env, { exigirBanco });
+const CHAVES_ENV = {
+  RADAR_CHAVE_CONVERSA: Buffer.alloc(32, 1).toString('base64'),
+  RADAR_CHAVE_CIFRA: Buffer.alloc(32, 2).toString('base64'),
+};
 
 describe('lerConfig', () => {
   it('valores padrão', () => {
@@ -16,14 +20,41 @@ describe('lerConfig', () => {
     expect(() => ler({ ...base, WEBHOOK_SEGREDO: 'curto' })).toThrow(/WEBHOOK_SEGREDO/);
   });
 
-  it('exige Supabase e login do painel quando há banco', () => {
+  it('exige Supabase, login do painel e as chaves da conversa privada quando há banco', () => {
     expect(() => ler(base, true)).toThrow(/SUPABASE_URL/);
     expect(() => ler(base, true)).toThrow(/PAINEL_SENHA/);
+    expect(() => ler(base, true)).toThrow(/RADAR_CHAVE_CONVERSA/);
+    expect(() => ler(base, true)).toThrow(/RADAR_CHAVE_CIFRA/);
     const banco = { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'chave' };
+    const painel = { PAINEL_USUARIO: 'piloto', PAINEL_SENHA: 'senha-bem-longa-1234' };
     expect(() => ler({ ...base, ...banco }, true)).toThrow(/PAINEL_USUARIO/);
-    const c = ler({ ...base, ...banco, PAINEL_USUARIO: 'piloto', PAINEL_SENHA: 'senha-bem-longa-1234' }, true);
+    expect(() => ler({ ...base, ...banco, ...painel }, true)).toThrow(/RADAR_CHAVE_CONVERSA/);
+    const c = ler({ ...base, ...banco, ...painel, ...CHAVES_ENV, OBSERVADOR_NUMERO: '+55 11 99000-0000' }, true);
     expect(c.supabase).toEqual({ url: 'https://x.supabase.co', serviceRoleKey: 'chave' });
     expect(c.painel).toEqual({ usuario: 'piloto', senha: 'senha-bem-longa-1234' });
+    expect(c.chaves?.conversa.length).toBe(32);
+    expect(c.chaves?.cifra.length).toBe(32);
+    expect(c.observadorNumero).toBe('551190000000'); // chave de telefone, sem o nono dígito
+  });
+
+  it('chave em formato errado ou as duas iguais: recusa citando só o nome da variável', () => {
+    const curta = Buffer.alloc(16, 9).toString('base64');
+    for (const [env, nome] of [
+      [{ RADAR_CHAVE_CONVERSA: curta }, 'RADAR_CHAVE_CONVERSA'],
+      [{ RADAR_CHAVE_CIFRA: 'nao-e-base64-SECRETA' }, 'RADAR_CHAVE_CIFRA'],
+      [{ ...CHAVES_ENV, RADAR_CHAVE_CIFRA: CHAVES_ENV.RADAR_CHAVE_CONVERSA }, 'RADAR_CHAVE_CIFRA'],
+    ] as const) {
+      try {
+        ler({ ...base, ...env });
+        expect.unreachable();
+      } catch (e) {
+        const msg = (e as Error).message;
+        expect(msg).toContain(nome);
+        expect(msg).not.toContain(curta);
+        expect(msg).not.toContain('SECRETA');
+        expect(msg).not.toContain(CHAVES_ENV.RADAR_CHAVE_CONVERSA);
+      }
+    }
   });
 
   it('senha do painel curta ou usuário com ":" é recusado, sem mostrar o valor', () => {
