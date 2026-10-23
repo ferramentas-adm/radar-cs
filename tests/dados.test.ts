@@ -212,18 +212,40 @@ describe('GET /api/radar: carregamento novo (uma consulta) = antigo', () => {
     expect(r.por_especialista.find((e) => e.especialista === 'Ana')!.conversas_privadas_7d).toBe(1);
   });
 
-  it('compararDadosRadar: diferenças = 0 quando batem, e acusa quando não batem', async () => {
+  it('compararDadosRadar: diferenças = 0 e nada em "onde" quando batem', async () => {
     const t = tabelas();
     const antigo = await carregarDadosRadarLegado(bancoFalso(t));
-    const json = radarDadosEmMemoria(t);
-    const r = compararDadosRadar(antigo, montarDadosRadar(json), AGORAS[0]!);
-    expect(r).toMatchObject({ grupos: 4, privadas: 2, diferencas: 0, definicoes: 1, semVarredura: 0 });
+    const r = compararDadosRadar(antigo, montarDadosRadar(radarDadosEmMemoria(t)), AGORAS[0]!);
+    expect(r).toMatchObject({ grupos: 4, privadas: 2, diferencas: 0, definicoes: 1, semVarredura: 0, onde: [] });
+  });
 
-    const errado = structuredClone(json);
-    errado.conversas[0]!.pendentes.pop(); // uma pendente a menos no grupo a
-    expect(compararDadosRadar(antigo, montarDadosRadar(errado), AGORAS[0]!).diferencas).toBeGreaterThan(0);
-    const semFeriado = { ...structuredClone(json), feriados: [] };
-    expect(compararDadosRadar(antigo, montarDadosRadar(semFeriado), AGORAS[0]!).diferencas).toBeGreaterThan(0);
+  it('compararDadosRadar: "onde" diz a categoria de cada diferença, só com contagens e nomes de campo', async () => {
+    const t = tabelas();
+    const antigo = await carregarDadosRadarLegado(bancoFalso(t));
+    const errado = structuredClone(radarDadosEmMemoria(t));
+    errado.conversas[0]!.pendentes.pop(); // grupo a: uma pendente a menos
+    errado.conversas[1]!.ultima_time!.id_mensagem = 'outra'; // grupo b: outra do time no mesmo horário
+    errado.conversas[4]!.especialista = 'Bruno'; // privada 1: outro especialista
+    errado.feriados = [];
+    errado.prazo = { ...errado.prazo, minutos_gestor: 40 };
+    errado.ultima_mensagem_em = isoSp('2026-10-20 16:00');
+    const r = compararDadosRadar(antigo, montarDadosRadar(errado), AGORAS[0]!);
+
+    expect(r.onde.slice(0, -1)).toEqual([
+      'conversas com campos diferentes: 0 grupos, 1 privada (especialista 1)',
+      'conversas com mensagens diferentes: 2 grupos, 0 privadas (mensagens: antigo 4, novo 3)',
+      '  última mensagem do time diferente: 1',
+      '  empate de horário entre duas mensagens do time: 1 (cada leitura escolheu uma; o motor não muda por isso)',
+      '  pendentes do cliente diferentes: 1',
+      'calendário/expediente: feriados (antigo 2, novo 0)',
+      'prazo: minutos_gestor',
+      'última mensagem: diferente',
+    ]);
+    expect(r.onde.at(-1)).toMatch(/^resposta do motor: [a-z_]+(, [a-z_]+)*$/);
+    expect(r.onde.at(-1)).toContain('por_especialista');
+    expect(r.diferencas).toBe(3 + 3 + r.onde.at(-1)!.split(', ').length);
+    // nunca jid, nome, id de mensagem ou texto
+    expect(r.onde.join('\n')).not.toMatch(/@g\.us|privada:|Cliente|Ana|Bruno|Julia|outra|\b[me]\d+\b/);
   });
 
   it('montarDadosRadar: rótulos, privada sem nome e entrada da regra do responsável só com grupos', () => {

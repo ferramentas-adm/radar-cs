@@ -47,6 +47,7 @@ console.log(
     `pilha de mensagens: ${r.pendentes} grupos`,
     `aguardando definição: ${r.definicoes} grupos (instâncias sem varredura recente: ${r.semVarredura})`,
     `tempo: antigo ${msLegado} ms, novo ${msNovo} ms`,
+    ...(r.onde.length ? ['onde:', ...r.onde.map((l) => `  ${l}`)] : []),
     `diferenças = ${r.diferencas}`,
   ].join('\n'),
 );
