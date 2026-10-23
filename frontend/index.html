@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: painel de parede em uma coluna larga. Faixa de quatro números, "Precisam de ação" com o tempo decorrido como destaque de cada linha, ações feitas por fora, e a carteira por especialista ao lado dos retornos prometidos. Identidade do Grupo Silva: preto, verde-limão, Anton, Archivo e IBM Plex Mono. Visual único e escuro, por escolha da marca. */
+/* Layout: painel de parede em uma coluna larga. Faixa de quatro números, "Precisam de ação" com o tempo decorrido como destaque de cada linha, ações feitas por fora, a carteira por especialista em largura total e os retornos prometidos. Seções de recursos que a API ainda não tem (recursos.* = false) ficam escondidas. Identidade do Grupo Silva: preto, verde-limão, Anton, Archivo e IBM Plex Mono. Visual único e escuro, por escolha da marca. */
 :root{
   --bg:#0A0A0A; --card:#141414; --card2:#1B1B1A; --line:#262626; --fg:#F4F4EE; --mut:#9A9A92;
   --lime:#C8E000; --red:#FF5A4F; --amber:#FFB020;
@@ -60,7 +60,6 @@ button{font:inherit;cursor:pointer}
 .stale .num{opacity:.45}
 h2{font-family:var(--display);font-weight:400;text-transform:uppercase;font-size:clamp(1.5rem,2.4vw,2.25rem);margin:0;line-height:1}
 .note{font-size:.8125rem;color:var(--mut);margin:.375rem 0 .875rem}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,28rem),1fr));gap:clamp(.75rem,1.5vw,1.25rem)}
 
 .alerts{display:flex;flex-direction:column}
 .row{display:grid;grid-template-columns:minmax(7.5rem,9.5rem) minmax(0,1fr) minmax(9rem,13rem) auto;gap:.5rem 1.25rem;align-items:start;padding:1rem .25rem;border-top:1px solid var(--line)}
@@ -94,6 +93,7 @@ h2{font-family:var(--display);font-weight:400;text-transform:uppercase;font-size
 
 .tw{overflow-x:auto;max-height:36rem;overflow-y:auto}
 .tw table{min-width:32rem}
+#time .tw table{min-width:0} #time th{white-space:normal;vertical-align:bottom}
 table{width:100%;border-collapse:collapse;font-size:clamp(.9375rem,1.2vw,1.1875rem);font-variant-numeric:tabular-nums}
 th{text-align:left;font-family:var(--mono);font-weight:500;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:.5rem .625rem;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);white-space:nowrap}
 td{padding:.75rem .625rem;border-bottom:1px solid var(--line);vertical-align:top}
@@ -180,18 +180,18 @@ html.tv .tvbtn{opacity:.5}
     <div class="card tile"><span class="lbl">Clientes em alerta</span><span class="num" id="k-alertas">–</span><span class="rule" id="k-total">&nbsp;</span></div>
     <div class="card tile"><span class="lbl">Sem contato</span><span class="num" id="k-contato">–</span><span class="rule">2 dias ou mais<span class="aw" id="a-contato" hidden></span></span></div>
     <div class="card tile"><span class="lbl">Sem resposta</span><span class="num" id="k-resposta">–</span><span class="rule">31 minutos ou mais<span class="aw" id="a-resposta" hidden></span></span></div>
-    <div class="card tile"><span class="lbl">Retornos vencidos</span><span class="num" id="k-retornos">–</span><span class="rule">prometido e não dado</span></div>
+    <div class="card tile" id="tile-retornos"><span class="lbl">Retornos vencidos</span><span class="num" id="k-retornos">–</span><span class="rule">prometido e não dado</span></div>
   </section>
 
   <section class="card" id="agir">
     <h2>Precisam de ação</h2>
-    <p class="note">Respondeu no grupo, o alerta sai sozinho. Agiu por ligação, privado ou reunião? Depois de agir, registre a ação aqui.</p>
+    <p class="note">Respondeu no grupo, o alerta sai sozinho.<span id="nota-registrar"> Agiu por ligação, privado ou reunião? Depois de agir, registre a ação aqui.</span></p>
     <div class="alerts" id="alertas" role="list"></div>
   </section>
 
   <section class="card" id="pilha">
     <h2>Pilha de mensagens</h2>
-    <p class="note">Clientes com mais mensagens esperando resposta desde a última mensagem do time. Cada quadrado é uma mensagem do cliente.</p>
+    <p class="note">Clientes com mais mensagens esperando resposta desde a última mensagem do time. Cada quadrado é uma mensagem do cliente. A situação é só a do "sem resposta", pela mensagem mais antiga.</p>
     <div class="tw"><table>
       <thead><tr><th class="n">#</th><th>Cliente</th><th>Mensagens</th><th>A mais antiga</th><th>Situação</th></tr></thead>
       <tbody id="t-pilha"></tbody></table></div>
@@ -206,25 +206,24 @@ html.tv .tvbtn{opacity:.5}
       <tbody id="t-manual"></tbody></table></div>
   </section>
 
-  <div class="grid">
-    <section class="card" id="time">
-      <h2>Por especialista</h2>
-      <p class="note">Quantos clientes de cada um estão fora do prazo agora. Cada quadrado é um cliente.</p>
-      <p class="legend"><span><i></i>em dia</span><span><i class="d-e"></i>aviso</span><span><i class="d-g"></i>gestor</span><span><i class="d-r"></i>ação feita por fora</span></p>
-      <div class="tw"><table>
-        <thead><tr><th>Especialista</th><th class="n">Clientes</th><th class="n">Sem contato</th><th class="n">Sem resposta</th><th class="n">Retornos vencidos</th><th class="n">Conversas privadas sem resposta</th><th class="n">Conversas privadas, 7 dias</th></tr></thead>
-        <tbody id="t-time"></tbody></table></div>
-      <p class="note">Conversas privadas (externas) não entram nos alertas: por regra, o atendimento é no grupo. Aqui aparecem só as contagens, sem nome nem número do cliente. Passe o mouse em "7 dias" para ver o mês.</p>
-      <div id="t-priv"></div>
-    </section>
-    <section class="card" id="retornos">
-      <h2>Retornos prometidos</h2>
-      <p class="note">Todo "vou ver e te retorno", com o prazo.</p>
-      <div class="tw"><table>
-        <thead><tr><th>Cliente</th><th>Promessa</th><th>Prazo</th><th>Situação</th></tr></thead>
-        <tbody id="t-ret"></tbody></table></div>
-    </section>
-  </div>
+  <section class="card" id="time">
+    <h2>Por especialista</h2>
+    <p class="note">Quantos clientes de cada um estão fora do prazo agora. Cada quadrado é um cliente.</p>
+    <p class="legend"><span><i></i>em dia</span><span><i class="d-e"></i>aviso</span><span><i class="d-g"></i>gestor</span><span id="leg-fora"><i class="d-r"></i>ação feita por fora</span></p>
+    <div class="tw"><table>
+      <thead><tr><th>Especialista</th><th class="n">Clientes</th><th class="n">Sem contato</th><th class="n">Sem resposta</th><th class="n" id="th-retornos">Retornos vencidos</th><th class="n">Privadas sem resposta</th><th class="n">Privadas, 7 dias</th></tr></thead>
+      <tbody id="t-time"></tbody></table></div>
+    <p class="note">Conversas privadas (externas) não entram nos alertas: por regra, o atendimento é no grupo. Aqui aparecem só as contagens, sem nome nem número do cliente. Passe o mouse em "7 dias" para ver o mês.</p>
+    <div id="t-priv"></div>
+  </section>
+
+  <section class="card" id="retornos">
+    <h2>Retornos prometidos</h2>
+    <p class="note">Todo "vou ver e te retorno", com o prazo.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Cliente</th><th>Promessa</th><th>Prazo</th><th>Situação</th></tr></thead>
+      <tbody id="t-ret"></tbody></table></div>
+  </section>
 
   <div class="modal" id="modal" hidden>
     <div class="dlg card" role="dialog" aria-modal="true" aria-labelledby="m-t" aria-describedby="m-p">
@@ -243,8 +242,8 @@ html.tv .tvbtn{opacity:.5}
   <div class="rules" id="regras">
     <span><b>Sem resposta:</b> <em>20 min aviso ao especialista</em> · <i>31 min gestor</i></span>
     <span><b>Sem contato:</b> <em>1 dia aviso ao especialista</em> · <i>2 dias gestor</i></span>
-    <span><b>Retorno vencido:</b> <i>direto pro gestor</i></span>
-    <span><b>Ação feita por fora:</b> <i>volta em 3h sem registro no grupo</i></span>
+    <span id="regra-retorno"><b>Retorno vencido:</b> <i>direto pro gestor</i></span>
+    <span id="regra-fora"><b>Ação feita por fora:</b> <i>volta em 3h sem registro no grupo</i></span>
   </div>
 </div>
 
@@ -329,7 +328,11 @@ html.tv .tvbtn{opacity:.5}
       }
       estados.set(g.id_grupo, estado);
       const pl = fila(g);
-      if (pl.length) pendentes.push({ id_grupo: g.id_grupo, cliente: g.cliente, especialista: g.especialista, quantidade: pl.length, mais_antiga_desde: iso(pl[0]), estado });
+      // Situação da pilha: só o "sem resposta", pela pendente mais antiga (no prazo = ok, aviso ou gestor).
+      if (pl.length) {
+        const sit = ag >= pl[0] + LIM.respGestor ? 'gestor' : ag >= pl[0] + LIM.respAviso ? 'aviso' : 'ok';
+        pendentes.push({ id_grupo: g.id_grupo, cliente: g.cliente, especialista: g.especialista, quantidade: pl.length, mais_antiga_desde: iso(pl[0]), estado: sit });
+      }
     }
     pendentes.sort((x, y) => y.quantidade - x.quantidade || ts(x.mais_antiga_desde) - ts(y.mais_antiga_desde) || x.cliente.localeCompare(y.cliente, 'pt-BR'));
     const chave = (a) => {
@@ -388,6 +391,7 @@ html.tv .tvbtn{opacity:.5}
     for (const g of grupos) ultima = Math.max(ultima, g.ultima_time, g.ultima_cliente);
     return {
       gerado_em: iso(ag),
+      recursos: { marcacoes: true, promessas: true },
       usuario: s.usuario,
       observador: { status: s.observador.status, desde: s.observador.desde ? iso(s.observador.desde) : null, ultima_mensagem_em: ultima ? iso(ultima) : null },
       resumo: {
@@ -463,7 +467,9 @@ html.tv .tvbtn{opacity:.5}
   // ---------- estado e dados ----------
   const S = { radar: null, recebidoEm: 0, open: null, tv: false, seen: null, flash: new Set(), minuto: -1, erro: false, erroEm: 0 };
   const refNow = () => (IS_DEMO ? now() : (S.radar ? ts(S.radar.gerado_em) + (Date.now() - S.recebidoEm) : Date.now()));
-  const podeMarcar = () => IS_DEMO || !!(S.radar && S.radar.usuario && S.radar.usuario.pode_marcar);
+  // Recurso ausente na resposta (ou false) = ainda não existe: a tela esconde em vez de mostrar zero.
+  const temRecurso = (k) => !!(S.radar && S.radar.recursos && S.radar.recursos[k] === true);
+  const podeMarcar = () => temRecurso('marcacoes') && (IS_DEMO || !!(S.radar && S.radar.usuario && S.radar.usuario.pode_marcar));
 
   async function api(method, path, body) {
     const r = await fetch(CFG.apiBase + path, { method, credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -652,6 +658,11 @@ html.tv .tvbtn{opacity:.5}
     } else off.hidden = true;
     $('resumo').classList.toggle('stale', !obsOk);
 
+    // recursos que ainda não existem na API: esconder, nunca mostrar zero
+    const temMarc = temRecurso('marcacoes'), temProm = temRecurso('promessas');
+    for (const id of ['manual', 'nota-registrar', 'leg-fora', 'regra-fora']) $(id).hidden = !temMarc;
+    for (const id of ['retornos', 'tile-retornos', 'th-retornos', 'regra-retorno']) $(id).hidden = !temProm;
+
     // números
     const rs = r.resumo;
     setNum('k-alertas', rs.em_alerta); setNum('k-contato', rs.sem_contato.gestor); setNum('k-resposta', rs.sem_resposta.gestor); setNum('k-retornos', rs.retornos_vencidos);
@@ -681,12 +692,13 @@ html.tv .tvbtn{opacity:.5}
       const c2 = el('td'), pile = el('div', 'pile');
       pile.appendChild(el('span', 'pn' + (cor ? ' ' + cor : ''), String(p.quantidade)));
       const dots = el('div', 'dots'), shown = Math.min(p.quantidade, 12);
-      for (let k = 0; k < shown; k++) dots.appendChild(el('i', cor ? 'd-' + cor : p.estado === 'resolvido_por_fora' ? 'd-r' : ''));
+      for (let k = 0; k < shown; k++) dots.appendChild(el('i', cor ? 'd-' + cor : ''));
       pile.appendChild(dots);
       if (p.quantidade > shown) pile.appendChild(el('span', 'mais', '+' + (p.quantidade - shown)));
       c2.appendChild(pile); tr.appendChild(c2);
       td(tr, 'há ' + dur(ref - ts(p.mais_antiga_desde)));
-      const sit = { gestor: ['Gestor', 'g'], aviso: ['Aviso', 'e'], resolvido_por_fora: ['Por fora', 'm'], ok: ['No prazo', 'ok'] }[p.estado] || ['—', 'm'];
+      // Só o "sem resposta" deste grupo (o estado geral fica em por_especialista[].clientes[].estado).
+      const sit = { gestor: ['Gestor', 'g'], aviso: ['Aviso', 'e'], ok: ['No prazo', 'ok'] }[p.estado] || ['—', 'm'];
       const c4 = el('td'); c4.appendChild(pill(sit[0], sit[1])); tr.appendChild(c4);
       tpi.appendChild(tr);
     });
@@ -718,7 +730,7 @@ html.tv .tvbtn{opacity:.5}
       }
       c1.appendChild(dots); tr.appendChild(c1);
       td(tr, String(e.clientes.length), 'n');
-      for (const v of [e.sem_contato, e.sem_resposta, e.retornos_vencidos]) td(tr, String(v), 'n ' + (v > 0 ? 'hot' : 'zero'));
+      for (const v of temProm ? [e.sem_contato, e.sem_resposta, e.retornos_vencidos] : [e.sem_contato, e.sem_resposta]) td(tr, String(v), 'n ' + (v > 0 ? 'hot' : 'zero'));
       // Conversas privadas: só contagens. Campo ausente (API antiga) mostra "—", nunca 0.
       const num = (v) => (typeof v === 'number' ? v : null);
       const psr = num(e.conversas_privadas_sem_resposta), p7 = num(e.conversas_privadas_7d), pm = num(e.conversas_privadas_mes);

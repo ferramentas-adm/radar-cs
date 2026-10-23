@@ -32,6 +32,7 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 ```json
 {
   "gerado_em": "2026-10-20T15:40:12-03:00",
+  "recursos": { "marcacoes": false, "promessas": false },
   "usuario": { "nome": "Camila Duarte", "pode_marcar": true },
   "observador": {
     "status": "conectado",
@@ -118,6 +119,7 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 
 | Campo | Valores / regra |
 |---|---|
+| `recursos` | `{ marcacoes, promessas }`, booleanos: o que o backend já implementa. `false` (ou campo ausente) = ainda não existe, e o painel **esconde** a parte em vez de mostrar zero. `marcacoes: false` esconde a seção "Ações feitas por fora", a frase "Agiu por ligação, privado ou reunião? Depois de agir, registre a ação aqui", o botão "Registrar ação feita", o item "ação feita por fora" da legenda e a regra da ação feita por fora no rodapé. `promessas: false` esconde a seção "Retornos prometidos", o cartão "Retornos vencidos", a coluna "Retornos vencidos" da tabela por especialista e a regra do retorno vencido no rodapé. Hoje o backend manda os dois `false`; a demonstração do painel, os dois `true`. Com `false`, `resolvidos_por_fora` e `retornos` vêm `[]` e `retornos_vencidos` vem `0`. |
 | `usuario.pode_marcar` | `true` mostra o botão "Registrar ação feita". Só especialistas e gestores. |
 | `observador.status` | `conectado`, `conectando` ou `desconectado` (vem de `GET /instance/status` da uazapi). Qualquer valor diferente de `conectado` faz o painel mostrar a faixa vermelha de aviso e **nunca** "Tudo em dia". |
 | `observador.desde` | Quando o status atual começou (usado na faixa de aviso). |
@@ -131,7 +133,7 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 | `pendentes[]` | Ranking da "Pilha de mensagens": clientes com mensagens esperando resposta. Só grupos `ativo = sim`, com `quantidade >= 1`. **Já vem ordenado**: mais mensagens primeiro; em empate, a mais antiga primeiro. O painel mostra os 8 primeiros (5 no modo TV) e não reordena. Campo opcional: se faltar, o painel mostra "Nenhuma mensagem de cliente esperando resposta". |
 | `pendentes[].quantidade` | Mensagens do cliente que exigem resposta (texto ou áudio, depois do filtro do classificador) enviadas **depois da última mensagem do time**. Não conta cumprimento, agradecimento nem encerramento. |
 | `pendentes[].mais_antiga_desde` | Hora da mais antiga dessas mensagens. O painel mostra "há X" a partir dela. |
-| `pendentes[].estado` | Mesmo valor de `por_especialista[].clientes[].estado`: `ok`, `aviso`, `gestor` ou `resolvido_por_fora`. Define a cor da pilha. Não carrega texto de mensagem. |
+| `pendentes[].estado` | Só o "sem resposta" daquele grupo, pela mensagem pendente **mais antiga** (`mais_antiga_desde`): `ok` (no prazo, antes do aviso), `aviso` ou `gestor`, com os mesmos prazos e o mesmo tempo de expediente do motivo `sem_resposta`. **Não** considera "sem contato", retorno vencido nem marcação: o estado geral do grupo fica em `por_especialista[].clientes[].estado`. Define a cor da pilha e a coluna "Situação". Não carrega texto de mensagem. |
 | `voltou_de_marcacao` | `{ como, marcado_por, marcado_em }` quando uma marcação à mão passou de 3 h sem mensagem do time no grupo. |
 | `como` | `ligacao`, `privado` ou `reuniao`. |
 | `por_especialista[].clientes[].estado` | `ok`, `aviso`, `gestor` ou `resolvido_por_fora`. Uma entrada por grupo ativo (conversa privada nunca entra). |

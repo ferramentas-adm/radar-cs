@@ -79,7 +79,18 @@ t('pilha: mais mensagens primeiro; empate pela mais antiga', () => {
   ]).pendentes;
   assert.deepEqual(r.map((x) => x.id_grupo), ['b', 'd', 'c', 'a']);
 });
-t('pilha: estado acompanha o alerta do cliente', () => { const r = run([G({ id_grupo: 'a', pend: [ago(40), ago(45)], ultima_cliente: ago(40) }), G({ id_grupo: 'b', pend: [ago(3), ago(4)], ultima_cliente: ago(3) })]).pendentes; assert.equal(r.find((x) => x.id_grupo === 'a').estado, 'gestor'); assert.equal(r.find((x) => x.id_grupo === 'b').estado, 'ok'); });
+t('pilha: estado é só o sem resposta, pela mais antiga', () => { const r = run([G({ id_grupo: 'a', pend: [ago(5), ago(40)], ultima_cliente: ago(5) }), G({ id_grupo: 'b', pend: [ago(3), ago(4)], ultima_cliente: ago(3) }), G({ id_grupo: 'c', pend: [ago(5), ago(25)], ultima_cliente: ago(5) })]).pendentes; assert.equal(r.find((x) => x.id_grupo === 'a').estado, 'gestor'); assert.equal(r.find((x) => x.id_grupo === 'b').estado, 'ok'); assert.equal(r.find((x) => x.id_grupo === 'c').estado, 'aviso'); });
+t('pilha: estado não herda sem contato nem marcação', () => {
+  const r = run([G({ ultima_time: ago(3000), ultima_cliente: ago(5), pend: [ago(5)] })]);
+  assert.equal(r.por_especialista[0].clientes[0].estado, 'gestor'); assert.equal(r.pendentes[0].estado, 'ok');
+  const m = run([G({ ultima_time: ago(1700), ultima_cliente: ago(40), pend: [ago(40)] })], [], { 'g1@g.us': { por: 'Esp A', como: 'ligacao', em: ago(10) } });
+  assert.equal(m.por_especialista[0].clientes[0].estado, 'resolvido_por_fora'); assert.equal(m.pendentes[0].estado, 'gestor');
+});
+t('demonstração: recursos de marcação e promessas ligados', () => assert.deepEqual(run([G()]).recursos, { marcacoes: true, promessas: true }));
+t('painel: cada parte de recurso tem id para esconder', () => {
+  for (const id of ['manual', 'nota-registrar', 'leg-fora', 'regra-fora', 'retornos', 'tile-retornos', 'th-retornos', 'regra-retorno']) assert.ok(html.includes('id="' + id + '"'), id);
+  assert.ok(html.includes('Privadas sem resposta') && html.includes('Privadas, 7 dias') && !html.includes('Conversas privadas sem resposta</th>'));
+});
 t('pilha: grupo inativo não entra', () => assert.equal(run([G({ ativo: false, ultima_cliente: ago(5) })]).pendentes.length, 0));
 t('pilha: não carrega texto de mensagem', () => assert.ok(!/texto/i.test(JSON.stringify(run([G({ ultima_cliente: ago(40), pend: [ago(40), ago(50)] })]).pendentes))));
 

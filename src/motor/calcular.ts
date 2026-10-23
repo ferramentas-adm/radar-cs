@@ -1,7 +1,8 @@
 // Motor de regras do Radar (função pura, sem I/O). Devolve a resposta de GET /api/radar no formato
 // de docs/api-contract.md. Mesma lógica do motor de demonstração do painel, com tempo de expediente.
 // Nesta fatia: só "sem resposta" (urgência fixa em médio) e "sem contato". Promessas e
-// "Registrar ação feita" ficam vazios.
+// "Registrar ação feita" ficam vazios e saem como recursos ausentes (recursos.* = false), para o
+// painel esconder o que ainda não existe em vez de mostrar zero.
 // Conversa privada nunca vira linha (alertas, pendentes, clientes, resumo): entra só nos números
 // por especialista (privadas sem resposta além do prazo de aviso; com atividade em 7 dias e no mês).
 import { inicioDoMes, somarDiasUteis, somarExpediente, type Calendario } from './expediente.js';
@@ -45,6 +46,8 @@ export interface EntradaMotor {
 
 type Nivel = 'aviso' | 'gestor';
 type Estado = Nivel | 'ok' | 'resolvido_por_fora';
+/** Só o "sem resposta" do grupo, pela pendente mais antiga: ok = no prazo. */
+type EstadoPendente = Nivel | 'ok';
 
 interface Motivo {
   tipo: 'sem_resposta' | 'sem_contato' | 'retorno_vencido';
@@ -90,7 +93,7 @@ export function calcular(e: EntradaMotor) {
     especialista: string;
     quantidade: number;
     mais_antiga_desde: string;
-    estado: Estado;
+    estado: EstadoPendente;
   }[] = [];
   const estados = new Map<string, Estado>();
 
@@ -111,12 +114,15 @@ export function calcular(e: EntradaMotor) {
 
     const motivos: Motivo[] = [];
     // Sem resposta: cada pendente corre no seu prazo; a mais antiga é a mais grave (mesmo nível).
+    // O mesmo nível vai para a pilha de mensagens (só o "sem resposta", sem o "sem contato").
+    let estadoPendente: EstadoPendente = 'ok';
     if (fila.length > 0) {
       const t = fila[0]!;
       const a = somarExpediente(t, e.prazo.minutos_aviso, e.calendario);
       const k = somarExpediente(t, e.prazo.minutos_gestor, e.calendario);
       if (ag >= a) {
-        motivos.push({ tipo: 'sem_resposta', nivel: ag >= k ? 'gestor' : 'aviso', desde: iso(t), aviso_em: iso(a), gestor_em: iso(k) });
+        estadoPendente = ag >= k ? 'gestor' : 'aviso';
+        motivos.push({ tipo: 'sem_resposta', nivel: estadoPendente, desde: iso(t), aviso_em: iso(a), gestor_em: iso(k) });
       }
     }
     // Sem contato: dias úteis desde a última do time (ou desde a entrada do observador).
@@ -151,7 +157,7 @@ export function calcular(e: EntradaMotor) {
         especialista: g.especialista,
         quantidade: fila.length,
         mais_antiga_desde: iso(fila[0]!),
-        estado,
+        estado: estadoPendente,
       });
     }
   }
@@ -242,6 +248,8 @@ export function calcular(e: EntradaMotor) {
 
   return {
     gerado_em: iso(ag),
+    // Ainda não implementados: o painel esconde as seções em vez de mostrar zero.
+    recursos: { marcacoes: false, promessas: false },
     usuario: e.usuario,
     observador: {
       status: e.observador.status,

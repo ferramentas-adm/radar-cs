@@ -180,13 +180,27 @@ describe('pilha de mensagens', () => {
     ]).pendentes;
     expect(r.map((x) => x.id_grupo)).toEqual(['b', 'd', 'c', 'a']);
   });
-  it('estado acompanha o alerta do cliente', () => {
+  it('estado: só o "sem resposta", pela pendente mais antiga (no prazo, aviso, gestor)', () => {
     const r = run([
-      { id_grupo: 'a', cliente_msgs: [ago(40), ago(45)] },
+      { id_grupo: 'a', cliente_msgs: [ago(5), ago(40)] },
       { id_grupo: 'b', cliente_msgs: [ago(3), ago(4)] },
+      { id_grupo: 'c', cliente_msgs: [ago(5), ago(25)] },
     ]).pendentes;
     expect(r.find((x) => x.id_grupo === 'a')!.estado).toBe('gestor');
     expect(r.find((x) => x.id_grupo === 'b')!.estado).toBe('ok');
+    expect(r.find((x) => x.id_grupo === 'c')!.estado).toBe('aviso');
+  });
+  it('estado não herda o "sem contato": grupo em gestor por contato, pendente no prazo = ok', () => {
+    const r = run([{ time: [sp('2026-10-15 15:00')], cliente_msgs: [ago(5)] }]);
+    expect(r.por_especialista[0]!.clientes[0]!.estado).toBe('gestor');
+    expect(r.pendentes[0]!.estado).toBe('ok');
+  });
+  it('estado em tempo de expediente: fora do expediente o relógio da pendente para', () => {
+    // segunda 18h50 → 10 min até 19h; às 9h05 de terça são 15 min: ainda no prazo
+    const r = run([{ time: [sp('2026-10-19 18:00')], cliente_msgs: [sp('2026-10-19 18:50')] }], { agora: sp('2026-10-20 09:05') });
+    expect(r.pendentes[0]!.estado).toBe('ok');
+    const r2 = run([{ time: [sp('2026-10-19 18:00')], cliente_msgs: [sp('2026-10-19 18:50')] }], { agora: sp('2026-10-20 09:10') });
+    expect(r2.pendentes[0]!.estado).toBe('aviso');
   });
   it('grupo inativo não entra', () => expect(run([{ ativo: false, cliente_msgs: [ago(5)] }]).pendentes).toHaveLength(0));
 });
@@ -217,6 +231,8 @@ describe('ordem, resumo e carteira', () => {
     });
     expect(r.resolvidos_por_fora).toEqual([]);
     expect(r.retornos).toEqual([]);
+    // o que ainda não existe sai como recurso ausente (o painel esconde em vez de mostrar zero)
+    expect(r.recursos).toEqual({ marcacoes: false, promessas: false });
     expect(r.alertas[0]!.voltou_de_marcacao).toBeNull();
     expect(r.usuario).toEqual({ nome: 'piloto', pode_marcar: false });
     expect(r.observador).toEqual({ status: 'desconectado', desde: new Date(ago(30)).toISOString(), ultima_mensagem_em: new Date(ago(2)).toISOString() });
