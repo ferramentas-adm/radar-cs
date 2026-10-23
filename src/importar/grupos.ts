@@ -1,6 +1,8 @@
 // Passo 2b: importação do CSV de grupos (exportado por grupos:exportar e preenchido pelo CS).
 // Função pura: recebe o texto do CSV, o time e os grupos que já estão no banco; devolve o que
 // gravar (upsert por jid) e as contagens. Mensagens de erro citam só o número da linha.
+// Importar é uma pessoa (o CS) definindo o responsável: marca principal_definido_em nos grupos
+// novos, nos que mudam de especialista e nos provisórios (cadastro automático) que o CSV confirma.
 import { coluna, lerCsv } from '../csv.js';
 
 export interface GrupoBanco {
@@ -10,6 +12,7 @@ export interface GrupoBanco {
   gestor: string | null;
   instancia: string | null;
   observador_entrou_em: string | null;
+  principal_definido_em: string | null;
 }
 
 export interface PlanoGrupos {
@@ -35,6 +38,8 @@ export interface EntradaGrupos {
   entrouEm: string;
   /** true quando veio de --entrou-em (para contar quando é ignorado). */
   entrouEmInformado: boolean;
+  /** ISO UTC de agora: principal_definido_em do que a importação define. */
+  definidoEm: string;
 }
 
 const chaveNome = (nome: string) => nome.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -101,6 +106,7 @@ export function planejarGrupos(e: EntradaGrupos): PlanoGrupos {
         gestor,
         instancia: e.instancia,
         observador_entrou_em: e.entrouEm,
+        principal_definido_em: e.definidoEm,
       });
       continue;
     }
@@ -114,8 +120,12 @@ export function planejarGrupos(e: EntradaGrupos): PlanoGrupos {
       gestor,
       instancia: e.instancia,
       observador_entrou_em: atual.observador_entrou_em,
+      principal_definido_em:
+        especialista !== atual.especialista ? e.definidoEm : (atual.principal_definido_em ?? e.definidoEm),
     };
-    const mudou = (['nome', 'especialista', 'gestor', 'instancia'] as const).some((c) => combinado[c] !== atual[c]);
+    const mudou = (['nome', 'especialista', 'gestor', 'instancia', 'principal_definido_em'] as const).some(
+      (c) => combinado[c] !== atual[c],
+    );
     if (!mudou) {
       plano.semMudanca++;
       continue;

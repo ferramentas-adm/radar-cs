@@ -1,16 +1,21 @@
-// Passo 2b: importação de var/time.csv (nome;numero[;instancia;gestor]) para a tabela time.
+// Passo 2b: importação de var/time.csv (nome;numero[;instancia;gestor;funcao]) para a tabela time.
 // Função pura: recebe o texto do CSV e o que já está no banco; devolve o que gravar e as contagens.
-// Colunas opcionais: instancia (nome da instância uazapi do número corporativo da pessoa) e gestor
-// (gestor padrão das conversas cadastradas sozinhas por essa instância). Célula vazia mantém o que
-// está no banco. Mensagens de erro citam só o número da linha, nunca nomes ou telefones.
+// Colunas opcionais: instancia (nome da instância uazapi do número corporativo da pessoa), gestor
+// (gestor padrão das conversas cadastradas sozinhas por essa instância) e funcao (especialista,
+// gestor ou observador; só especialista conta para decidir o dono de um grupo). Célula vazia mantém
+// o que está no banco. Mensagens de erro citam só o número da linha, nunca nomes ou telefones.
 import { lerCsv, coluna } from '../csv.js';
 import { NOME_INSTANCIA } from '../grupos/exportar.js';
+
+export const FUNCOES = ['especialista', 'gestor', 'observador'] as const;
+export type Funcao = (typeof FUNCOES)[number];
 
 export interface MembroTimeBanco {
   nome: string;
   numero: string;
   instancia: string | null;
   gestor_padrao: string | null;
+  funcao: Funcao | null;
 }
 
 export interface PlanoTime {
@@ -19,6 +24,8 @@ export interface PlanoTime {
   novos: number;
   atualizados: number;
   semMudanca: number;
+  /** Linhas válidas do arquivo que ficam com funcao = especialista (contando a do banco quando vazia). */
+  especialistas: number;
   erros: string[];
 }
 
@@ -26,7 +33,7 @@ const chaveNome = (nome: string) => nome.trim().replace(/\s+/g, ' ').toLowerCase
 
 export function planejarTime(texto: string, existentes: MembroTimeBanco[]): PlanoTime {
   const csv = lerCsv(texto);
-  const plano: PlanoTime = { gravar: [], novos: 0, atualizados: 0, semMudanca: 0, erros: [] };
+  const plano: PlanoTime = { gravar: [], novos: 0, atualizados: 0, semMudanca: 0, especialistas: 0, erros: [] };
   if (!csv.cabecalho.includes('nome') || !csv.cabecalho.includes('numero')) {
     plano.erros.push('cabeçalho: precisa das colunas "nome" e "numero"');
     return plano;
@@ -52,6 +59,7 @@ export function planejarTime(texto: string, existentes: MembroTimeBanco[]): Plan
     const numero = coluna(csv, l, 'numero').replace(/\D/g, '');
     const instanciaCsv = coluna(csv, l, 'instancia').toLowerCase();
     const gestorCsv = coluna(csv, l, 'gestor');
+    const funcaoCsv = (coluna(csv, l, 'funcao') || coluna(csv, l, 'função')).toLowerCase();
     const erro = (motivo: string) => plano.erros.push(`linha ${l.numero}: ${motivo}`);
 
     const chave = chaveNome(nome);
@@ -79,7 +87,9 @@ export function planejarTime(texto: string, existentes: MembroTimeBanco[]): Plan
                         ? 'gestor não está no time'
                         : gestor !== undefined && chaveNome(gestor) === chave
                           ? 'a pessoa não pode ser gestora de si mesma'
-                          : undefined;
+                          : funcaoCsv !== '' && !(FUNCOES as readonly string[]).includes(funcaoCsv)
+                            ? 'função inválida (use especialista, gestor ou observador)'
+                            : undefined;
     if (motivo) {
       erro(motivo);
       continue;
@@ -95,12 +105,15 @@ export function planejarTime(texto: string, existentes: MembroTimeBanco[]): Plan
       numero,
       instancia: instanciaCsv || (atual?.instancia ?? null),
       gestor_padrao: gestor ?? atual?.gestor_padrao ?? null,
+      funcao: (funcaoCsv as Funcao) || (atual?.funcao ?? null),
     };
+    if (linha.funcao === 'especialista') plano.especialistas++;
     if (
       atual &&
       atual.numero === linha.numero &&
       atual.instancia === linha.instancia &&
-      atual.gestor_padrao === linha.gestor_padrao
+      atual.gestor_padrao === linha.gestor_padrao &&
+      atual.funcao === linha.funcao
     ) {
       plano.semMudanca++;
       continue;

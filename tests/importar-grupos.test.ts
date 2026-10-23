@@ -13,6 +13,7 @@ const entrada = (texto: string, extra: Partial<EntradaGrupos> = {}): EntradaGrup
   instancia: 'roni_ramos',
   entrouEm: AGORA,
   entrouEmInformado: false,
+  definidoEm: AGORA,
   ...extra,
 });
 
@@ -36,6 +37,7 @@ describe('planejarGrupos', () => {
         gestor: 'Gil',
         instancia: 'roni_ramos',
         observador_entrou_em: AGORA,
+        principal_definido_em: AGORA,
       },
     ]);
   });
@@ -81,6 +83,7 @@ describe('planejarGrupos', () => {
         gestor: 'Gil',
         instancia: 'roni_ramos',
         observador_entrou_em: '2026-10-01T03:00:00.000Z',
+        principal_definido_em: '2026-10-01T03:00:00.000Z',
       },
       {
         jid: '2@g.us',
@@ -89,6 +92,7 @@ describe('planejarGrupos', () => {
         gestor: 'Gil',
         instancia: 'roni_ramos',
         observador_entrou_em: '2026-10-02T03:00:00.000Z',
+        principal_definido_em: '2026-10-02T03:00:00.000Z',
       },
     ];
     const plano = planejarGrupos(
@@ -110,8 +114,24 @@ describe('planejarGrupos', () => {
         gestor: 'Gil',
         instancia: 'roni_ramos',
         observador_entrou_em: '2026-10-01T03:00:00.000Z',
+        principal_definido_em: AGORA, // trocou o especialista: nova definição
       },
     ]);
+  });
+
+  it('grupo provisório (cadastro automático) confirmado pelo CSV passa a ser definido por pessoa', () => {
+    const atual: GrupoBanco = {
+      jid: '1@g.us',
+      nome: 'Cliente Alfa',
+      especialista: 'Bruno',
+      gestor: 'Gil',
+      instancia: 'roni_ramos',
+      observador_entrou_em: '2026-10-01T03:00:00.000Z',
+      principal_definido_em: null,
+    };
+    const plano = planejarGrupos(entrada(`${CAB}\nCliente Alfa;1@g.us;5;;Bruno;Gil\n`, { existentes: [atual] }));
+    expect(plano.atualizados).toBe(1);
+    expect(plano.gravar).toEqual([{ ...atual, principal_definido_em: AGORA }]);
   });
 
   it('cabeçalho sem as colunas obrigatórias', () => {

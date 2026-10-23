@@ -3,6 +3,8 @@
 //        [--entrou-em AAAA-MM-DD] [--gravar]
 // Sem --gravar é simulação: lê o banco e não grava nada. --entrou-em vale só para grupo novo
 // (meia-noite em America/Sao_Paulo); sem ele, grupo novo recebe a data e hora de agora.
+// Importar marca o especialista como definido por pessoa (principal_definido_em): a varredura não
+// troca mais sozinha esses grupos.
 // O terminal só mostra contagens e erros por número de linha (nunca nomes, JIDs ou telefones).
 import { readFile } from 'node:fs/promises';
 import { criarClienteSupabase } from '../src/db/supabase.js';
@@ -63,7 +65,7 @@ const existentes: GrupoBanco[] = [];
 for (let i = 0; i < jids.length; i += LOTE) {
   const r = await db
     .from('grupos')
-    .select('jid, nome, especialista, gestor, instancia, observador_entrou_em')
+    .select('jid, nome, especialista, gestor, instancia, observador_entrou_em, principal_definido_em')
     .in('jid', jids.slice(i, i + LOTE));
   if (r.error) throw new Error(`supabase: ${r.error.message}`);
   existentes.push(...((r.data ?? []) as GrupoBanco[]));
@@ -76,6 +78,7 @@ const plano = planejarGrupos({
   instancia,
   entrouEm,
   entrouEmInformado: dataEntrada !== undefined,
+  definidoEm: agora.toISOString(),
 });
 
 console.log(`modo: ${gravar ? 'gravação' : 'simulação (nada gravado; use --gravar)'}`);

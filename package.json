@@ -24,7 +24,9 @@
     "mensagens:resumo": "tsx scripts/resumo-mensagens.ts",
     "mensagens:historico": "tsx scripts/historico-mensagens.ts",
     "conversas:exportar": "tsx scripts/exportar-conversas.ts",
-    "conversas:bloquear": "tsx scripts/bloquear-conversa.ts"
+    "conversas:bloquear": "tsx scripts/bloquear-conversa.ts",
+    "conversas:definir-principal": "tsx scripts/definir-principal.ts",
+    "grupos:varrer": "tsx scripts/varrer-grupos.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

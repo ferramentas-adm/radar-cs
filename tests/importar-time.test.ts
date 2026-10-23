@@ -6,6 +6,7 @@ const m = (nome: string, numero: string, o: Partial<MembroTimeBanco> = {}): Memb
   numero,
   instancia: null,
   gestor_padrao: null,
+  funcao: null,
   ...o,
 });
 
@@ -48,6 +49,26 @@ describe('planejarTime', () => {
       'linha 6: gestor não está no time',
       'linha 7: a pessoa não pode ser gestora de si mesma',
     ]);
+  });
+
+  it('funcao: especialista, gestor ou observador; vazia mantém o banco; conta os especialistas', () => {
+    const plano = planejarTime(
+      'nome;numero;instancia;gestor;funcao\nRoni;5511977776666;roni_ramos;;Especialista\nJulia;5511955554444;;;gestor\nFelipe;5511933332222;;;\n',
+      [m('Felipe', '5511933332222', { funcao: 'especialista' }), m('Julia', '5511955554444')],
+    );
+    expect(plano.erros).toEqual([]);
+    expect(plano.gravar).toEqual([
+      m('Roni', '5511977776666', { instancia: 'roni_ramos', funcao: 'especialista' }),
+      m('Julia', '5511955554444', { funcao: 'gestor' }),
+    ]);
+    expect([plano.novos, plano.atualizados, plano.semMudanca, plano.especialistas]).toEqual([1, 1, 1, 2]);
+  });
+
+  it('funcao inválida é erro na linha; sem a coluna nada muda', () => {
+    const plano = planejarTime('nome;numero;funcao\nAna;5511988887777;chefe\n', []);
+    expect(plano.erros).toEqual(['linha 2: função inválida (use especialista, gestor ou observador)']);
+    expect(plano.gravar).toEqual([]);
+    expect(planejarTime('nome;numero\nAna;5511988887777\n', [m('Ana', '5511988887777', { funcao: 'gestor' })]).semMudanca).toBe(1);
   });
 
   it('aceita vírgula como separador', () => {
