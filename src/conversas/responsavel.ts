@@ -96,6 +96,8 @@ export interface PlanoResponsaveis {
   trocas: TrocaAutomatica[];
   sugeridas: number;
   aguardando: number;
+  /** Os grupos aguardando definição, com os especialistas presentes (para o painel). */
+  aguardandoLista: { jid: string; especialistas: string[] }[];
   /** Não vazio = nada foi decidido (nem troca, nem sugestão, nem aguardando). */
   semVarreduraRecente: string[];
 }
@@ -116,6 +118,7 @@ export function planejarResponsaveis(e: EntradaResponsaveis): PlanoResponsaveis 
     trocas: [],
     sugeridas: 0,
     aguardando: 0,
+    aguardandoLista: [],
     semVarreduraRecente: semVarreduraRecente(especialistas, e.varreduras, e.agora),
   };
   if (plano.semVarreduraRecente.length > 0) return plano;
@@ -137,7 +140,10 @@ export function planejarResponsaveis(e: EntradaResponsaveis): PlanoResponsaveis 
         instancia: d.para.instancia,
       });
     } else if (d.acao === 'sugerir') plano.sugeridas++;
-    else if (d.acao === 'aguardando') plano.aguardando++;
+    else if (d.acao === 'aguardando') {
+      plano.aguardando++;
+      plano.aguardandoLista.push({ jid: g.jid, especialistas: d.especialistas });
+    }
   }
   return plano;
 }

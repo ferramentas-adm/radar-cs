@@ -36,7 +36,7 @@ Se este arquivo e a especificação divergirem, vale este arquivo (ele já incor
     - **O sinal é a presença, nunca "de qual instância chegou a mensagem"** (com duas instâncias no grupo, só a primeira grava a mensagem). Só conta quem tem `time.funcao = 'especialista'` e instância.
     - **Regra do responsável** (`src/conversas/responsavel.ts`). Grupo **definido por pessoa**: dono presente ou nenhum especialista presente = mantém; dono saiu e 1 especialista = **sugere** a troca; dono saiu e 2 ou mais = **aguardando definição**. Grupo **provisório**: 0 = mantém; 1 = **troca sozinho** (especialista, gestor padrão dele e instância, com histórico em `responsaveis_historico`); 2 ou mais = aguardando definição. Aguardando continua com o dono atual. Sugestão e aguardando não são gravadas: saem da presença na hora.
     - **Segurança:** só decide (trocar, sugerir ou aguardar) quando **todas** as instâncias de especialista têm varredura boa nas últimas 24 horas; senão não decide nada e a saída diz quais estão sem varredura recente. (Com uma instância só varrida, todo grupo pareceria ter um especialista só.)
-    - Ainda falta mostrar no painel a lista "aguardando definição" e as sugestões (vai junto com a otimização de desempenho). Até lá, as contagens saem no `grupos:varrer`.
+    - O painel mostra a lista "aguardando definição" (seção "Grupos aguardando definição do especialista principal", no máximo 20 e "+N", só nome de grupo e de especialista, nunca privada; com alguma instância sem varredura recente mostra "Lista indisponível: N instâncias sem varredura recente"). As sugestões de troca ainda não aparecem no painel: só a contagem no `grupos:varrer`.
   - **Definir o principal à mão:** `npm run conversas:definir-principal -- --id N --especialista "NOME" [--gravar]` (id de `var/conversas.csv`; simulação por padrão). Exige alguém do time ativo com `funcao = especialista`; gestor = gestor padrão dele (sem ele, fica o do grupo). Marca `principal_definido_em`, grava o histórico (`motivo = 'pessoa'`) e avisa se, pela última varredura, a pessoa não está no grupo. Serve para confirmar uma troca sugerida. Não vale para privada (o responsável é sempre o dono da instância).
   - **Troca de carteira** é o cliente passar de um especialista para outro: `conversas:definir-principal` (com histórico) ou importação.
   - **O observador não cadastra:** continua só com os grupos já cadastrados e descarta conversa privada.
@@ -292,6 +292,12 @@ Os casos de limite (19/20/31 min, 23h59/24h/48h etc.) valem **dentro do expedien
 - **Limitação conhecida:** a mesma pessoa que aparece primeiro só com LID (sem número) e depois com número vira duas conversas privadas, porque o identificador da privada é o número quando conhecido e o LID quando não. Juntar as duas é trabalho da reconciliação (passo 5).
 - **Guardar as duas chaves (`RADAR_CHAVE_CONVERSA` e `RADAR_CHAVE_CIFRA`) em local seguro além do `.env`.** Trocar a chave de conversa muda todos os identificadores das privadas já gravadas (elas viram conversas novas); perder a chave de cifra impede decifrar o chatid guardado.
 
+## Desempenho do GET /api/radar
+
+- O banco é lido numa consulta só: `public.radar_dados()` (jsonb; só `service_role`, `search_path` fixo; nunca lê texto nem número), com índices parciais em `mensagens` para a última do time e as pendentes do cliente.
+- Cache de 30 s compartilhado entre os painéis (`src/api/cache.ts`): guarda só os dados do banco; o motor roda a cada pedido com a hora atual e o observador ao vivo. Pedidos simultâneos esperam a mesma consulta; erro não fica guardado.
+- `npm run radar:comparar` (só leitura; quem roda é o responsável) compara a função com o carregamento antigo (`src/api/dados-legado.ts`) no banco real e imprime só contagens, tempos e "diferenças = N". Rodar depois de aplicar a migration e antes de confiar no painel.
+
 ## Operação durante o piloto (máquina local)
 
 - O webhook não tenta de novo: **máquina dormindo ou sem internet = eventos perdidos.** Desligar suspensão automática e contar com a reconciliação do passo 5 ao religar.
@@ -312,7 +318,7 @@ Os casos de limite (19/20/31 min, 23h59/24h/48h etc.) valem **dentro do expedien
 
 - **Nunca ler nem editar o `.env`.**
 - **Nunca fazer commit nem push sem pedido explícito.**
-- **Nunca rodar** `db:push`, `webhook:configurar`, `grupos:varrer`, `mensagens:historico`, `conversas:*` nem `time:importar`: quem roda é o responsável pelo projeto.
+- **Nunca rodar** `db:push`, `webhook:configurar`, `grupos:varrer`, `mensagens:historico`, `conversas:*`, `time:importar` nem `radar:comparar`: quem roda é o responsável pelo projeto.
 - Todo comando que grava é **simulação por padrão**; `--gravar` só é usado pelo responsável.
 - **No fim de cada tarefa:** rodar `npm test` e `npm run typecheck`, gravar o resumo e o diff em `var\revisao-<tema>.md` (a pasta `var/` é ignorada pelo git) e **parar**.
 - Saídas e logs **só com contagens**: nunca nome, número, jid ou texto de mensagem.

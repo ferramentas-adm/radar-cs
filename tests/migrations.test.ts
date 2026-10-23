@@ -47,10 +47,10 @@ describe('migrations', () => {
 
   describe('funções rpc (troca de presença e de responsável)', () => {
     const funcoes = [...sql.matchAll(/create (?:or replace )?function public\.(\w+)\(([^)]*)\)([\s\S]*?)\$\$;/gi)];
-    const rpc = funcoes.filter((f) => ['substituir_presencas', 'trocar_responsavel'].includes(f[1]!));
+    const rpc = funcoes.filter((f) => ['substituir_presencas', 'trocar_responsavel', 'radar_dados'].includes(f[1]!));
 
-    it('existem as duas', () => {
-      expect(rpc.map((f) => f[1])).toEqual(['substituir_presencas', 'trocar_responsavel']);
+    it('existem as três', () => {
+      expect(rpc.map((f) => f[1])).toEqual(['substituir_presencas', 'trocar_responsavel', 'radar_dados']);
     });
 
     it('toda função tem search_path fixo', () => {
@@ -92,6 +92,23 @@ describe('migrations', () => {
       expect(ramo![1]).toContain('return true;');
       // vem antes da conferência do esperado (que devolve false)
       expect(c.indexOf(ramo![0])).toBeLessThan(c.indexOf('if atual.especialista is distinct from p_esperado'));
+    });
+
+    it('radar_dados: só leitura, nunca lê texto nem número, só conversas ativas', () => {
+      const c = corpo('radar_dados');
+      expect(c).toMatch(/^\s*returns jsonb\s+language sql\s+stable/);
+      expect(c).not.toMatch(/\b(insert|update|delete)\b/i);
+      expect(c).not.toMatch(/\btexto\b|\bnumero\b|\blid\b|autor_numero|chat_cifrado/);
+      expect(c).toContain('where c.ativo');
+      expect(c).toContain('limit 1000');
+      expect(c).toContain("m.conta and m.autor_tipo = 'time'");
+      expect(c).toContain("m.conta and m.autor_tipo = 'cliente'");
+    });
+
+    it('índices parciais da última do time e das pendentes do cliente', () => {
+      expect(sql).toMatch(/create index \w+ on public\.mensagens \(jid, enviada_em desc\)\s+where conta and autor_tipo = 'time';/);
+      expect(sql).toMatch(/create index \w+ on public\.mensagens \(jid, enviada_em\)\s+where conta and autor_tipo = 'cliente';/);
+      expect(sql).toMatch(/create index \w+ on public\.mensagens \(enviada_em desc\);/);
     });
 
     it("as duas só tratam grupo (tipo = 'grupo', o valor da migration de conversas)", () => {

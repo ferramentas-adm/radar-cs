@@ -26,7 +26,8 @@
     "conversas:exportar": "tsx scripts/exportar-conversas.ts",
     "conversas:bloquear": "tsx scripts/bloquear-conversa.ts",
     "conversas:definir-principal": "tsx scripts/definir-principal.ts",
-    "grupos:varrer": "tsx scripts/varrer-grupos.ts"
+    "grupos:varrer": "tsx scripts/varrer-grupos.ts",
+    "radar:comparar": "tsx scripts/comparar-radar.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

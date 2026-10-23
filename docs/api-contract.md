@@ -111,7 +111,19 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
       "prazo": "2026-10-19T14:40:00-03:00",
       "situacao": "vencido"
     }
-  ]
+  ],
+  "definicoes_pendentes": {
+    "total": 23,
+    "sem_varredura_recente": 0,
+    "itens": [
+      {
+        "id_grupo": "120363040001010@g.us",
+        "cliente": "Hotel Praia Serena",
+        "especialista_atual": "Rafael Moura",
+        "especialistas": ["Bianca Teixeira", "Rafael Moura"]
+      }
+    ]
+  }
 }
 ```
 
@@ -142,6 +154,8 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 | `por_especialista[].conversas_privadas_7d` | Conversas privadas ativas distintas com ao menos uma mensagem (qualquer tipo, de qualquer lado) nos últimos 7 × 24 h. |
 | `por_especialista[].conversas_privadas_mes` | O mesmo, desde a meia-noite do dia 1 do mês corrente (`America/Sao_Paulo`). O painel mostra só como dica ao passar o mouse em "7 dias". |
 | `conversas_privadas_*` ausente | O painel mostra "—" (nunca 0), para não afirmar zero com uma API que ainda não manda o campo. |
+| `definicoes_pendentes` | Grupos "aguardando definição do especialista principal": pela regra do responsável (`src/conversas/responsavel.ts`), grupos ativos com 2 ou mais especialistas conectados presentes e nenhum principal definido por uma pessoa que esteja no grupo. **Nunca conversa privada.** `itens` traz no máximo 20, ordenados pelo nome do grupo; `total` é a quantidade toda (o painel mostra "+N"). Cada item só tem `id_grupo` (jid do grupo), `cliente` (nome do grupo), `especialista_atual` e `especialistas` (nomes, em ordem alfabética): nunca número, texto ou jid de privada. A seção do painel some quando `total` e `sem_varredura_recente` são 0, e não aparece no modo TV. |
+| `definicoes_pendentes.sem_varredura_recente` | Quantas instâncias de especialista estão sem varredura boa nas últimas 24 h. Se for maior que 0, a regra não decide nada (`total` = 0, `itens` = []) e o painel mostra "Lista indisponível: N instâncias sem varredura recente". |
 | `retornos[].situacao` | `vencido`, `vence_hoje` (até 6 h), `no_prazo`, `cumprido`. Incluir cumpridos só das últimas 24 h. |
 
 ### De onde vem cada coisa (tabelas do `CLAUDE.md`)
@@ -154,7 +168,10 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 | `pendentes` | `mensagens` (as do cliente depois da última do time, com `exige_resposta`) |
 | `resolvidos_por_fora`, `voltou_de_marcacao` | `marcacoes` |
 | `conversas_privadas_*` | `grupos` com `tipo = 'privada'` e `ativo`, mais `mensagens` (pendentes do cliente e última mensagem de cada conversa) |
+| `definicoes_pendentes` | `grupos`, `presencas`, `time` e `varreduras` |
 | `observador` | `sync_estado` |
+
+Tudo o que vem do banco é lido numa consulta só, `public.radar_dados()` (migration `20261025120000_radar_dados.sql`), e guardado por 30 s num cache compartilhado entre os painéis abertos. O cálculo (alertas, tempos) roda a cada pedido com a hora atual e o estado do observador ao vivo: só as mensagens podem chegar com até 30 s de atraso.
 
 ## POST /api/marcacoes
 

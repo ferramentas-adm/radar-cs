@@ -295,3 +295,62 @@ describe('conversas privadas: só números por especialista', () => {
     expect(esp(r, 'Esp A')).toMatchObject({ conversas_privadas_sem_resposta: 0, conversas_privadas_7d: 0, conversas_privadas_mes: 0 });
   });
 });
+
+describe('aguardando definição do especialista principal', () => {
+  const TIME = [
+    { nome: 'Ana', instancia: 'ana', gestor_padrao: 'Gestor X', funcao: 'especialista' as const },
+    { nome: 'Bruno', instancia: 'bruno', gestor_padrao: 'Gestor X', funcao: 'especialista' as const },
+  ];
+  const VARRIDO = [
+    { instancia: 'ana', concluida_em: new Date(ago(60)).toISOString() },
+    { instancia: 'bruno', concluida_em: new Date(ago(60)).toISOString() },
+  ];
+  const cenario = (n: number, extra: Partial<NonNullable<EntradaMotor['responsaveis']>> = {}) => {
+    const gs: G[] = Array.from({ length: n }, (_, i) => ({ id_grupo: `g${String(i).padStart(2, '0')}@g.us`, cliente: `Cliente ${String(n - i).padStart(2, '0')}`, especialista: 'Ana' }));
+    const responsaveis = {
+      grupos: gs.map((g) => ({ jid: g.id_grupo!, especialista: 'Ana', gestor: 'Gestor X', principal_definido_em: null })),
+      presencas: gs.flatMap((g) => [{ jid: g.id_grupo!, instancia: 'ana' }, { jid: g.id_grupo!, instancia: 'bruno' }]),
+      time: TIME,
+      varreduras: VARRIDO,
+      ...extra,
+    };
+    return run(gs, { responsaveis });
+  };
+
+  it('no máximo 20 itens, com o total; ordem pelo nome do grupo; só nomes', () => {
+    const d = cenario(25).definicoes_pendentes;
+    expect(d.total).toBe(25);
+    expect(d.sem_varredura_recente).toBe(0);
+    expect(d.itens).toHaveLength(20);
+    expect(d.itens[0]).toEqual({ id_grupo: 'g24@g.us', cliente: 'Cliente 01', especialista_atual: 'Ana', especialistas: ['Ana', 'Bruno'] });
+    expect(d.itens.map((i) => i.cliente)).toEqual([...d.itens.map((i) => i.cliente)].sort());
+    for (const i of d.itens) expect(Object.keys(i).sort()).toEqual(['cliente', 'especialista_atual', 'especialistas', 'id_grupo']);
+  });
+
+  it('varredura atrasada: nada decidido, lista vazia e quantas instâncias estão sem varredura', () => {
+    const d = cenario(3, { varreduras: [VARRIDO[0]!] }).definicoes_pendentes;
+    expect(d).toEqual({ total: 0, sem_varredura_recente: 1, itens: [] });
+  });
+
+  it('nunca privada nem grupo inativo; sem dados de presença, lista vazia', () => {
+    const priv = `privada:${'0'.repeat(64)}`;
+    const r = run(
+      [
+        { id_grupo: 'a@g.us', cliente: 'A' },
+        { id_grupo: 'b@g.us', cliente: 'B', ativo: false },
+        { id_grupo: priv, tipo: 'privada', cliente: '', time: [], cliente_msgs: [], ultima_atividade_em: null },
+      ],
+      {
+        responsaveis: {
+          grupos: ['a@g.us', 'b@g.us', priv].map((jid) => ({ jid, especialista: 'Ana', gestor: null, principal_definido_em: null })),
+          presencas: ['a@g.us', 'b@g.us', priv].flatMap((jid) => [{ jid, instancia: 'ana' }, { jid, instancia: 'bruno' }]),
+          time: TIME,
+          varreduras: VARRIDO,
+        },
+      },
+    );
+    expect(r.definicoes_pendentes.itens.map((i) => i.id_grupo)).toEqual(['a@g.us']);
+    expect(JSON.stringify(r.definicoes_pendentes)).not.toContain('privada:');
+    expect(run([{}]).definicoes_pendentes).toEqual({ total: 0, sem_varredura_recente: 0, itens: [] });
+  });
+});

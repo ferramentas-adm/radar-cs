@@ -86,6 +86,22 @@ t('pilha: estado não herda sem contato nem marcação', () => {
   const m = run([G({ ultima_time: ago(1700), ultima_cliente: ago(40), pend: [ago(40)] })], [], { 'g1@g.us': { por: 'Esp A', como: 'ligacao', em: ago(10) } });
   assert.equal(m.por_especialista[0].clientes[0].estado, 'resolvido_por_fora'); assert.equal(m.pendentes[0].estado, 'gestor');
 });
+// grupos aguardando definição do especialista principal
+const runD = (grupos, definicoes, sem = 0) => calcular({ agora: AG, grupos, definicoes, sem_varredura_recente: sem, promessas: [], marcacoes: {}, observador: { status: 'conectado', desde: null }, usuario: { nome: 'x', pode_marcar: true } });
+t('definições: no máximo 20 itens com o total (+N), ordem pelo nome, só nomes', () => {
+  const gs = Array.from({ length: 25 }, (_, i) => G({ id_grupo: 'g' + i, cliente: 'Cliente ' + String(25 - i).padStart(2, '0') }));
+  const d = runD(gs, gs.map((g) => ({ id_grupo: g.id_grupo, especialistas: ['Esp B', 'Esp A'] }))).definicoes_pendentes;
+  assert.equal(d.total, 25); assert.equal(d.itens.length, 20); assert.equal(d.sem_varredura_recente, 0);
+  assert.deepEqual(d.itens[0], { id_grupo: 'g24', cliente: 'Cliente 01', especialista_atual: 'Esp A', especialistas: ['Esp A', 'Esp B'] });
+});
+t('definições: grupo inativo não entra; sem lista, vazio', () => {
+  assert.equal(runD([G({ ativo: false })], [{ id_grupo: 'g1@g.us', especialistas: ['Esp A', 'Esp B'] }]).definicoes_pendentes.total, 0);
+  assert.deepEqual(run([G()]).definicoes_pendentes, { total: 0, sem_varredura_recente: 0, itens: [] });
+});
+t('painel: seção de definições com id e textos de indisponível e +N', () => {
+  for (const id of ['definicoes', 'def-indisp', 'def-tabela', 't-def', 'def-mais']) assert.ok(html.includes('id="' + id + '"'), id);
+  assert.ok(html.includes('Grupos aguardando definição do especialista principal') && html.includes('Lista indisponível: ') && html.includes('sem varredura recente'));
+});
 t('demonstração: recursos de marcação e promessas ligados', () => assert.deepEqual(run([G()]).recursos, { marcacoes: true, promessas: true }));
 t('painel: cada parte de recurso tem id para esconder', () => {
   for (const id of ['manual', 'nota-registrar', 'leg-fora', 'regra-fora', 'retornos', 'tile-retornos', 'th-retornos', 'regra-retorno']) assert.ok(html.includes('id="' + id + '"'), id);

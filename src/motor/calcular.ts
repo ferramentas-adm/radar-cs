@@ -5,10 +5,14 @@
 // painel esconder o que ainda não existe em vez de mostrar zero.
 // Conversa privada nunca vira linha (alertas, pendentes, clientes, resumo): entra só nos números
 // por especialista (privadas sem resposta além do prazo de aviso; com atividade em 7 dias e no mês).
+// "Aguardando definição do especialista principal": pela regra do responsável (planejarResponsaveis),
+// só grupos, no máximo 20 itens com o total; só nome do grupo e nomes de especialista.
+import { planejarResponsaveis, type EntradaResponsaveis } from '../conversas/responsavel.js';
 import { inicioDoMes, somarDiasUteis, somarExpediente, type Calendario } from './expediente.js';
 
 const MIN = 60_000;
 const SETE_DIAS = 7 * 24 * 60 * MIN;
+export const MAX_DEFINICOES = 20;
 
 export interface GrupoMotor {
   id_grupo: string; // jid
@@ -42,6 +46,8 @@ export interface EntradaMotor {
   observador: { status: 'conectado' | 'conectando' | 'desconectado'; desde: number | null };
   ultimaMensagemEm: number | null;
   usuario: { nome: string; pode_marcar: boolean };
+  /** Presença, time e varreduras (sem agora). Ausente = lista "aguardando definição" vazia. */
+  responsaveis?: Omit<EntradaResponsaveis, 'agora'>;
 }
 
 type Nivel = 'aviso' | 'gestor';
@@ -243,6 +249,27 @@ export function calcular(e: EntradaMotor) {
     item.clientes.sort((x, y) => ord[x.estado] - ord[y.estado] || x.cliente.localeCompare(y.cliente, 'pt-BR'));
   }
 
+  // Aguardando definição: só grupos ativos (privada nunca entra), ordenados pelo nome do grupo.
+  const porJid = new Map(grupos.map((g) => [g.id_grupo, g]));
+  const plano = e.responsaveis
+    ? planejarResponsaveis({
+        ...e.responsaveis,
+        grupos: e.responsaveis.grupos.filter((g) => porJid.has(g.jid)),
+        agora: ag,
+      })
+    : undefined;
+  const aguardando = (plano?.aguardandoLista ?? [])
+    .map((a) => {
+      const g = porJid.get(a.jid)!;
+      return { id_grupo: a.jid, cliente: g.cliente, especialista_atual: g.especialista, especialistas: a.especialistas };
+    })
+    .sort((x, y) => x.cliente.localeCompare(y.cliente, 'pt-BR') || x.id_grupo.localeCompare(y.id_grupo));
+  const definicoes_pendentes = {
+    total: aguardando.length,
+    sem_varredura_recente: plano?.semVarreduraRecente.length ?? 0,
+    itens: aguardando.slice(0, MAX_DEFINICOES),
+  };
+
   const conta = (tipo: Motivo['tipo'], nivel: Nivel) =>
     alertas.filter((a) => a.motivos.some((m) => m.tipo === tipo && m.nivel === nivel)).length;
 
@@ -269,6 +296,7 @@ export function calcular(e: EntradaMotor) {
     resolvidos_por_fora: [],
     por_especialista,
     retornos: [],
+    definicoes_pendentes,
   };
 }
 

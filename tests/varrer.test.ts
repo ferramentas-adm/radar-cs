@@ -143,7 +143,7 @@ describe('novaConversaDeGrupo e simulação', () => {
 });
 
 describe('formatarVarredura', () => {
-  const responsaveis = { trocas: [], sugeridas: 2, aguardando: 1, semVarreduraRecente: [] };
+  const responsaveis = { trocas: [], sugeridas: 2, aguardando: 1, aguardandoLista: [], semVarreduraRecente: [] };
 
   it('só contagens: sem nome de grupo, número ou jid', async () => {
     const grupos = [G(1), G(2)];
@@ -169,7 +169,7 @@ describe('formatarVarredura', () => {
       {
         listagem: { ok: false, motivo: 'erro', detalhe: 'HTTP 429' },
         classificacao: undefined,
-        responsaveis: { trocas: [], sugeridas: 0, aguardando: 0, semVarreduraRecente: ['bruno', 'caio'] },
+        responsaveis: { trocas: [], sugeridas: 0, aguardando: 0, aguardandoLista: [], semVarreduraRecente: ['bruno', 'caio'] },
       },
       false,
     );

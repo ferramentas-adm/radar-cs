@@ -109,8 +109,19 @@ describe('planejarResponsaveis', () => {
     expect([p.sugeridas, p.aguardando]).toEqual([1, 1]);
   });
 
+  it('lista dos aguardando: jid e especialistas presentes em ordem alfabética (só para o painel)', () => {
+    const p = planejarResponsaveis(
+      entrada({ presencas: [...entrada().presencas, { jid: 'e@g.us', instancia: 'bruno' }, { jid: 'e@g.us', instancia: 'ana' }], grupos: [...entrada().grupos, definido({ jid: 'e@g.us', especialista: 'Julia' })] }),
+    );
+    expect(p.aguardandoLista).toEqual([
+      { jid: 'b@g.us', especialistas: ['Ana', 'Bruno'] },
+      { jid: 'e@g.us', especialistas: ['Ana', 'Bruno'] },
+    ]);
+    expect(p.aguardando).toBe(p.aguardandoLista.length);
+  });
+
   it('alguma instância de especialista sem varredura nas últimas 24 h: nada decidido e diz quais', () => {
     const p = planejarResponsaveis(entrada({ varreduras: [{ instancia: 'ana', concluida_em: ha(2) }] }));
-    expect(p).toEqual({ trocas: [], sugeridas: 0, aguardando: 0, semVarreduraRecente: ['bruno'] });
+    expect(p).toEqual({ trocas: [], sugeridas: 0, aguardando: 0, aguardandoLista: [], semVarreduraRecente: ['bruno'] });
   });
 });

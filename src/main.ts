@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
+import { CacheRadar } from './api/cache.js';
 import { carregarDadosRadar } from './api/dados.js';
 import { CacheCadastro, carregadorSupabase } from './cadastro.js';
 import { ErroConfig, lerConfig } from './config.js';
@@ -51,15 +52,17 @@ async function main(): Promise<void> {
 
   const estado = new EstadoInstancias(config.instancias.map((i) => i.nome));
   const painelCfg = config.painel;
+  // Uma consulta ao banco a cada 30 s, no máximo, por mais painéis que estejam abertos.
+  const cacheRadar = db ? new CacheRadar(() => carregarDadosRadar(db)) : undefined;
   const painel =
-    db && painelCfg
+    cacheRadar && painelCfg
       ? {
           usuario: painelCfg.usuario,
           senha: painelCfg.senha,
           html: await readFile(ARQUIVO_PAINEL, 'utf8'),
           radar: async (usuario: string) =>
             calcular({
-              ...(await carregarDadosRadar(db)),
+              ...(await cacheRadar.obter()),
               agora: Date.now(),
               observador: estado.resumo(),
               usuario: { nome: usuario, pode_marcar: false }, // "Registrar ação feita" fora desta fatia

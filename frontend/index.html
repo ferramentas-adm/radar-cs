@@ -119,6 +119,7 @@ tr.done td{opacity:.55}
 .pile .mais{font-family:var(--mono);font-size:.6875rem;color:var(--mut);align-self:center}
 td.rk{font-family:var(--mono);color:var(--mut);width:2.5rem}
 html.tv #t-pilha tr:nth-child(n+6){display:none}
+html.tv #definicoes{display:none}
 .legend{display:flex;flex-wrap:wrap;gap:.25rem .875rem;font-family:var(--mono);font-size:.6875rem;color:var(--mut);margin:0 0 .75rem}
 .legend span{display:inline-flex;align-items:center;gap:.35rem}
 .legend i{width:.6rem;height:.6rem;border-radius:2px;display:inline-block;background:rgba(200,224,0,.35)}
@@ -215,6 +216,16 @@ html.tv .tvbtn{opacity:.5}
       <tbody id="t-time"></tbody></table></div>
     <p class="note">Conversas privadas (externas) não entram nos alertas: por regra, o atendimento é no grupo. Aqui aparecem só as contagens, sem nome nem número do cliente. Passe o mouse em "7 dias" para ver o mês.</p>
     <div id="t-priv"></div>
+  </section>
+
+  <section class="card" id="definicoes" hidden>
+    <h2>Grupos aguardando definição do especialista principal</h2>
+    <p class="note">Grupos com mais de um especialista conectado, sem um principal definido por uma pessoa. Até a definição, continuam com o responsável de hoje. Defina com o comando conversas:definir-principal.</p>
+    <p class="note" id="def-indisp" hidden></p>
+    <div class="tw" id="def-tabela"><table>
+      <thead><tr><th>Grupo</th><th>Responsável hoje</th><th>Especialistas no grupo</th></tr></thead>
+      <tbody id="t-def"></tbody></table></div>
+    <p class="note" id="def-mais" hidden></p>
   </section>
 
   <section class="card" id="retornos">
@@ -400,8 +411,18 @@ html.tv .tvbtn{opacity:.5}
         sem_resposta: { gestor: cnt('sem_resposta', 'gestor'), aviso: cnt('sem_resposta', 'aviso') },
         retornos_vencidos: alertas.reduce((n, a) => n + a.motivos.filter((m) => m.tipo === 'retorno_vencido').length, 0)
       },
-      alertas, pendentes, resolvidos_por_fora: resolvidos, por_especialista, retornos
+      alertas, pendentes, resolvidos_por_fora: resolvidos, por_especialista, retornos,
+      definicoes_pendentes: definicoes(s, gmap)
     };
+  }
+  // Grupos aguardando definição do especialista principal (no servidor vem da regra do responsável).
+  // Só grupos ativos, ordenados pelo nome; no máximo 20 itens, com o total.
+  function definicoes(s, gmap) {
+    const todos = (s.definicoes || []).filter((d) => gmap.has(d.id_grupo)).map((d) => {
+      const g = gmap.get(d.id_grupo);
+      return { id_grupo: d.id_grupo, cliente: g.cliente, especialista_atual: g.especialista, especialistas: [...d.especialistas].sort((a, b) => a.localeCompare(b, 'pt-BR')) };
+    }).sort((x, y) => x.cliente.localeCompare(y.cliente, 'pt-BR'));
+    return { total: todos.length, sem_varredura_recente: s.sem_varredura_recente || 0, itens: todos.slice(0, 20) };
   }
   // </engine>
 
@@ -432,7 +453,7 @@ html.tv .tvbtn{opacity:.5}
     'Mercado Boa Vista': [8, 9, 11], 'Academia Corpo em Movimento': [18, 19], 'Vidraçaria Cristal': [12, 13],
     'Móveis Casa Nova': [12, 13, 14, 16, 18]
   };
-  const DEMO = { off: 0, obsOn: true, obsDesde: null, voce: 'Camila Duarte', grupos: [], promessas: [], marc: {}, privadas: [] };
+  const DEMO = { off: 0, obsOn: true, obsDesde: null, voce: 'Camila Duarte', grupos: [], promessas: [], marc: {}, privadas: [], definicoes: [] };
   // Conversas privadas da demonstração: [especialista, minutos desde a última do time, minutos desde a última do cliente].
   const PRIVADAS = [
     ['Camila Duarte', 300, 45], ['Camila Duarte', 20, 90], ['Camila Duarte', 4000, 4100],
@@ -458,11 +479,16 @@ html.tv .tvbtn{opacity:.5}
       { id: 'p8', id_grupo: id('Construtora Alvorada'), texto: 'Ver pendência com o financeiro', criada_em: ago(400), prazo: ago(30) },
       { id: 'p9', id_grupo: id('Imobiliária Cantareira'), texto: 'Retornar sobre o chamado do sistema', criada_em: ago(1000), prazo: ago(650) }
     ];
+    DEMO.definicoes = [
+      { id_grupo: id('Hotel Praia Serena'), especialistas: ['Rafael Moura', 'Bianca Teixeira'] },
+      { id_grupo: id('Energia Solar Brilho'), especialistas: ['Thiago Brandão', 'Camila Duarte'] },
+      { id_grupo: id('Studio Lume'), especialistas: ['Camila Duarte', 'Rafael Moura', 'Thiago Brandão'] }
+    ];
     DEMO.marc[id('Distribuidora Pinheiro')] = { por: 'Camila Duarte', como: 'ligacao', em: ago(70) };
     DEMO.marc[id('Cursos Livre Saber')] = { por: 'Bianca Teixeira', como: 'reuniao', em: ago(25) };
     DEMO.marc[id('Gráfica Ponto Cor')] = { por: 'Rafael Moura', como: 'privado', em: ago(220) };
   }
-  const snapDemo = () => ({ agora: now(), grupos: DEMO.grupos, privadas: DEMO.privadas, promessas: DEMO.promessas, marcacoes: DEMO.marc, observador: { status: DEMO.obsOn ? 'conectado' : 'desconectado', desde: DEMO.obsDesde }, usuario: { nome: DEMO.voce, pode_marcar: true } });
+  const snapDemo = () => ({ agora: now(), grupos: DEMO.grupos, privadas: DEMO.privadas, definicoes: DEMO.definicoes, promessas: DEMO.promessas, marcacoes: DEMO.marc, observador: { status: DEMO.obsOn ? 'conectado' : 'desconectado', desde: DEMO.obsDesde }, usuario: { nome: DEMO.voce, pode_marcar: true } });
 
   // ---------- estado e dados ----------
   const S = { radar: null, recebidoEm: 0, open: null, tv: false, seen: null, flash: new Set(), minuto: -1, erro: false, erroEm: 0 };
@@ -743,6 +769,22 @@ html.tv .tvbtn{opacity:.5}
       const n = e.conversas_privadas_sem_resposta;
       if (typeof n === 'number' && n > 0) tpv.appendChild(el('p', 'note', e.especialista + ' possui ' + n + (n === 1 ? ' conversa privada (externa) sem resposta.' : ' conversas privadas (externas) sem resposta.')));
     }
+
+    // grupos aguardando definição do especialista principal (some quando não há nada a mostrar)
+    const df = r.definicoes_pendentes, td2 = $('t-def'); td2.textContent = '';
+    const dfTotal = df && typeof df.total === 'number' ? df.total : 0, dfSem = df && typeof df.sem_varredura_recente === 'number' ? df.sem_varredura_recente : 0;
+    $('definicoes').hidden = !(dfTotal > 0 || dfSem > 0);
+    $('def-indisp').hidden = !(dfSem > 0);
+    $('def-indisp').textContent = dfSem > 0 ? 'Lista indisponível: ' + dfSem + (dfSem === 1 ? ' instância sem varredura recente.' : ' instâncias sem varredura recente.') : '';
+    $('def-tabela').hidden = !(dfSem === 0 && dfTotal > 0);
+    for (const d of (dfSem === 0 && df && Array.isArray(df.itens) ? df.itens : [])) {
+      const tr = el('tr');
+      td(tr, d.cliente); td(tr, d.especialista_atual); td(tr, (d.especialistas || []).join(', '));
+      td2.appendChild(tr);
+    }
+    const dfMostrados = dfSem === 0 && df && Array.isArray(df.itens) ? df.itens.length : 0, dfResto = dfSem === 0 ? dfTotal - dfMostrados : 0;
+    $('def-mais').hidden = !(dfResto > 0);
+    $('def-mais').textContent = dfResto > 0 ? '+' + dfResto + (dfResto === 1 ? ' outro grupo aguardando definição.' : ' outros grupos aguardando definição.') : '';
 
     // retornos
     const tp = $('t-ret'); tp.textContent = '';
