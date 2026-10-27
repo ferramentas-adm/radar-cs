@@ -4,6 +4,8 @@ import { servicoAdminSupabase } from './api/admin.js';
 import { CacheRadar } from './api/cache.js';
 import { carregarDadosRadar } from './api/dados.js';
 import { encerrarMarcacoes, servicoMarcacoesSupabase } from './marcacoes/servico.js';
+import { varrerInstancia } from './grupos/varredura.js';
+import { limparRetencao } from './retencao.js';
 import { criarClassificador } from './classificador/classificador.js';
 import { CacheCadastro, carregadorSupabase } from './cadastro.js';
 import { ErroConfig, lerConfig } from './config.js';
@@ -31,6 +33,10 @@ const RECARGA_CADASTRO_MS = 60_000;
 const CONSULTA_STATUS_MS = 2 * 60_000;
 const RECONCILIA_MS = 5 * 60_000;
 const ENCERRA_MARCACOES_MS = 60_000;
+const VARREDURA_MS = 24 * 60 * 60_000;
+/** Primeira varredura automática alguns minutos depois de subir (a reconciliação vai antes). */
+const VARREDURA_INICIAL_MS = 10 * 60_000;
+const RETENCAO_MS = 24 * 60 * 60_000;
 
 async function main(): Promise<void> {
   carregarEnv();
@@ -215,6 +221,71 @@ async function main(): Promise<void> {
   const timerMarcacoes = setInterval(() => void fecharMarcacoes(), ENCERRA_MARCACOES_MS);
   timerMarcacoes.unref();
 
+  // Varredura automática (VARREDURA_AUTOMATICA=true): uma vez por dia, uma instância de pessoa por vez,
+  // grava cadastro, presença e regra do responsável, como `grupos:varrer --gravar`. Log só com contagens.
+  let varrendo = false;
+  const varrerTodas = async () => {
+    if (!db || varrendo) return;
+    varrendo = true;
+    try {
+      for (const i of config.instancias.filter((x) => x.tipo === 'pessoa')) {
+        const uazapi = clientes.get(i.nome);
+        if (!uazapi) continue;
+        try {
+          const r = await varrerInstancia(db, { nome: i.nome, uazapi, gravar: true, observador: config.observadorNumero });
+          if (!r.ok) {
+            app?.log.warn({ instancia: i.nome }, 'varredura automática: instância sem dono em time.instancia');
+            continue;
+          }
+          const c = r.contagens;
+          app?.log.info(
+            {
+              instancia: i.nome,
+              listagem_ok: c.listagem.ok,
+              ...(c.listagem.ok ? {} : { motivo: c.listagem.motivo }),
+              grupos_listados: c.classificacao?.listados ?? 0,
+              cadastrados: c.cadastrados ?? 0,
+              falhas_cadastro: c.falhasCadastro ?? 0,
+              presencas: c.presencasGravadas ?? 0,
+              trocas: c.trocasGravadas ?? 0,
+              aguardando_definicao: c.responsaveis.aguardandoLista.length,
+              sem_varredura_recente: c.responsaveis.semVarreduraRecente.length,
+            },
+            'varredura automática',
+          );
+        } catch (e) {
+          app?.log.warn({ instancia: i.nome, erro: (e as Error).message }, 'falha na varredura automática');
+        }
+      }
+    } finally {
+      varrendo = false;
+    }
+  };
+  const timersVarredura: NodeJS.Timeout[] = [];
+  if (config.varreduraAutomatica && db && baseUrl) {
+    const t1 = setTimeout(() => void varrerTodas(), VARREDURA_INICIAL_MS);
+    const t2 = setInterval(() => void varrerTodas(), VARREDURA_MS);
+    t1.unref();
+    t2.unref();
+    timersVarredura.push(t1, t2);
+  }
+
+  // Retenção (LGPD), uma vez por dia com RETENCAO_ATIVA=true. Apagar não tem volta: desligada por padrão.
+  const limpar = async () => {
+    if (!db) return;
+    try {
+      const r = await limparRetencao(db);
+      app?.log.info({ mensagens_apagadas: r.mensagens, eventos_brutos_apagados: r.eventos_brutos }, 'retenção');
+    } catch (e) {
+      app?.log.warn({ erro: (e as Error).message }, 'falha na limpeza de retenção');
+    }
+  };
+  if (config.retencaoAtiva && db) {
+    const t = setInterval(() => void limpar(), RETENCAO_MS);
+    t.unref();
+    timersVarredura.push(t);
+  }
+
   let encerrando = false;
   const encerrar = async (sinal: string) => {
     if (encerrando) return;
@@ -224,6 +295,7 @@ async function main(): Promise<void> {
     clearInterval(timerStatus);
     clearInterval(timerReconciliar);
     clearInterval(timerMarcacoes);
+    for (const t of timersVarredura) clearTimeout(t);
     await app?.close();
     await fila.esvaziar();
     process.exit(0);
@@ -234,6 +306,8 @@ async function main(): Promise<void> {
   // Só localhost: o túnel (e depois o proxy do servidor) é quem expõe para fora.
   await app.listen({ host: '127.0.0.1', port: config.porta });
   app.log.info({ classificador: classificador ? config.classificador?.modelo : 'desligado' }, 'classificador de urgência');
+  app.log.info({ varredura_automatica: config.varreduraAutomatica && !!db && !!baseUrl }, 'varredura automática');
+  app.log.info({ retencao: config.retencaoAtiva && !!db }, 'limpeza de retenção (LGPD)');
   app.log.info(
     { destino: semBanco ? ARQUIVO_DEV : 'supabase', instancias: config.instancias.map((i) => i.nome) },
     'receptor do webhook no ar',

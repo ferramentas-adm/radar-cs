@@ -32,6 +32,10 @@ export interface Config {
   chaves: ChavesConversa | undefined;
   /** Chave de telefone do número observador (ignorado ao classificar grupo interno). */
   observadorNumero: string | undefined;
+  /** Varredura diária automática das instâncias de pessoa (cadastro, presença e regra do responsável). */
+  varreduraAutomatica: boolean;
+  /** Limpeza diária de retenção (LGPD): apaga mensagens de conversa bloqueada há mais de 90 dias. */
+  retencaoAtiva: boolean;
   /** Classificador de urgência (Claude Haiku). Ausente = desligado, e toda mensagem vale médio. */
   classificador: { chave: string; modelo: string } | undefined;
 }
@@ -63,6 +67,8 @@ const esquema = z.object({
   RADAR_CHAVE_CIFRA: opcional(z.string().refine((v) => lerChave(v) !== undefined)),
   OBSERVADOR_NUMERO: opcional(z.string().regex(/^\+?[0-9 ()-]{12,}$/)),
   CLASSIFICADOR_ATIVO: opcional(z.enum(['true', 'false'])),
+  VARREDURA_AUTOMATICA: opcional(z.enum(['true', 'false'])),
+  RETENCAO_ATIVA: opcional(z.enum(['true', 'false'])),
   CLASSIFICADOR_MODELO: opcional(z.string().regex(/^[a-z0-9.-]+$/)),
   ANTHROPIC_API_KEY: opcional(z.string().min(1)),
 });
@@ -84,6 +90,8 @@ const DESCRICAO: Record<string, string> = {
   RADAR_CHAVE_CIFRA: 'precisa ser Base64 de 32 bytes (44 caracteres; veja o comando no .env.example)',
   OBSERVADOR_NUMERO: 'precisa ser 55 + DDD + número',
   CLASSIFICADOR_ATIVO: 'precisa ser true ou false',
+  VARREDURA_AUTOMATICA: 'precisa ser true ou false',
+  RETENCAO_ATIVA: 'precisa ser true ou false',
   CLASSIFICADOR_MODELO: 'inválido',
   ANTHROPIC_API_KEY: 'inválido',
 };
@@ -186,6 +194,8 @@ export function lerConfig(env: NodeJS.ProcessEnv, opcoes: { exigirBanco: boolean
         : undefined,
     chaves: conversa && cifra ? { conversa, cifra } : undefined,
     observadorNumero: e.OBSERVADOR_NUMERO ? chaveTelefone(e.OBSERVADOR_NUMERO) : undefined,
+    varreduraAutomatica: e.VARREDURA_AUTOMATICA === 'true',
+    retencaoAtiva: e.RETENCAO_ATIVA === 'true',
     classificador:
       e.CLASSIFICADOR_ATIVO === 'true' && e.ANTHROPIC_API_KEY
         ? { chave: e.ANTHROPIC_API_KEY, modelo: e.CLASSIFICADOR_MODELO ?? 'claude-haiku-5-5' }
