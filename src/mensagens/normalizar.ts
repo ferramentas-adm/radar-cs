@@ -18,6 +18,10 @@ export interface MensagemNormalizada {
   /** Só a máscara "[texto omitido: N caracteres]"; nunca o conteúdo. */
   texto: string | null;
   enviada_em: string;
+  /** Classificação da IA (só mensagem do cliente classificada; ausente = vale médio e exige resposta). */
+  categoria?: string;
+  urgencia?: 'alto' | 'medio' | 'baixo';
+  exige_resposta?: boolean;
 }
 
 const TIPOS: Record<string, TipoMensagem> = {
@@ -36,6 +40,11 @@ function objeto(v: unknown): Record<string, unknown> | undefined {
 }
 
 const texto = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+/** Texto (ou legenda) da mensagem, só para a classificação em memória. Nunca é gravado nem logado. */
+export function textoDaMensagem(payload: unknown): string {
+  return texto(objeto(objeto(payload)?.message)?.text);
+}
 
 /** O payload é de mensagem de grupo? (antes de olhar o cadastro). Devolve o jid do grupo. */
 export function jidDoGrupo(payload: unknown): string | undefined {

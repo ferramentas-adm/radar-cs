@@ -32,6 +32,8 @@ export interface Config {
   chaves: ChavesConversa | undefined;
   /** Chave de telefone do número observador (ignorado ao classificar grupo interno). */
   observadorNumero: string | undefined;
+  /** Classificador de urgência (Claude Haiku). Ausente = desligado, e toda mensagem vale médio. */
+  classificador: { chave: string; modelo: string } | undefined;
 }
 
 export class ErroConfig extends Error {
@@ -60,6 +62,9 @@ const esquema = z.object({
   RADAR_CHAVE_CONVERSA: opcional(z.string().refine((v) => lerChave(v) !== undefined)),
   RADAR_CHAVE_CIFRA: opcional(z.string().refine((v) => lerChave(v) !== undefined)),
   OBSERVADOR_NUMERO: opcional(z.string().regex(/^\+?[0-9 ()-]{12,}$/)),
+  CLASSIFICADOR_ATIVO: opcional(z.enum(['true', 'false'])),
+  CLASSIFICADOR_MODELO: opcional(z.string().regex(/^[a-z0-9.-]+$/)),
+  ANTHROPIC_API_KEY: opcional(z.string().min(1)),
 });
 
 const DESCRICAO: Record<string, string> = {
@@ -78,6 +83,9 @@ const DESCRICAO: Record<string, string> = {
   RADAR_CHAVE_CONVERSA: 'precisa ser Base64 de 32 bytes (44 caracteres; veja o comando no .env.example)',
   RADAR_CHAVE_CIFRA: 'precisa ser Base64 de 32 bytes (44 caracteres; veja o comando no .env.example)',
   OBSERVADOR_NUMERO: 'precisa ser 55 + DDD + número',
+  CLASSIFICADOR_ATIVO: 'precisa ser true ou false',
+  CLASSIFICADOR_MODELO: 'inválido',
+  ANTHROPIC_API_KEY: 'inválido',
 };
 
 /** Instâncias do .env. Problemas citam só nomes de variáveis. */
@@ -142,6 +150,10 @@ export function lerConfig(env: NodeJS.ProcessEnv, opcoes: { exigirBanco: boolean
       problemas.push('PAINEL_ADMIN_SENHA: precisa ser diferente de PAINEL_SENHA');
     }
   }
+  // O classificador manda o texto das mensagens do cliente à API da Anthropic: só liga com pedido explícito.
+  if (env.CLASSIFICADOR_ATIVO?.trim() === 'true' && !env.ANTHROPIC_API_KEY?.trim()) {
+    problemas.push('ANTHROPIC_API_KEY: obrigatório quando CLASSIFICADOR_ATIVO=true');
+  }
   const conversa = lerChave(env.RADAR_CHAVE_CONVERSA);
   const cifra = lerChave(env.RADAR_CHAVE_CIFRA);
   if (conversa && cifra && conversa.equals(cifra)) {
@@ -174,5 +186,9 @@ export function lerConfig(env: NodeJS.ProcessEnv, opcoes: { exigirBanco: boolean
         : undefined,
     chaves: conversa && cifra ? { conversa, cifra } : undefined,
     observadorNumero: e.OBSERVADOR_NUMERO ? chaveTelefone(e.OBSERVADOR_NUMERO) : undefined,
+    classificador:
+      e.CLASSIFICADOR_ATIVO === 'true' && e.ANTHROPIC_API_KEY
+        ? { chave: e.ANTHROPIC_API_KEY, modelo: e.CLASSIFICADOR_MODELO ?? 'claude-haiku-5-5' }
+        : undefined,
   };
 }

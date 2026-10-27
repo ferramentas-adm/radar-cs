@@ -3,8 +3,9 @@ import type { Cadastro } from '../cadastro.js';
 import type { InstanciaConfig } from '../config.js';
 import type { Cadastrador } from '../conversas/cadastrador.js';
 import { conversaDoEvento } from '../conversas/classificar.js';
+import type { Classificacao, Classificador } from '../classificador/classificador.js';
 import { statusDoEventoConexao } from '../instancias/estado.js';
-import { normalizarMensagem } from '../mensagens/normalizar.js';
+import { normalizarMensagem, textoDaMensagem } from '../mensagens/normalizar.js';
 import type { EventoBruto } from '../repositorio.js';
 import { sanitizarPayload, sanitizarPayloadPrivada } from './sanitizar.js';
 import { iguaisSeguro, instanciaDoPayload } from './validar.js';
@@ -23,6 +24,8 @@ export interface DepsWebhook {
   cadastro: Cadastro;
   conversas: Pick<Cadastrador, 'resolver'>;
   fila: { enfileirar(evento: EventoBruto): void; acompanhar(trabalho: Promise<void>): void };
+  /** Classifica a urgência das mensagens do cliente (só grupos). Sem isto, tudo vale médio. */
+  classificador?: Classificador;
   /** Recebe o status dos eventos "connection" (não grava nada). */
   estado?: { registrar(nome: string, statusUazapi: string, agora: number): void };
 }
@@ -72,6 +75,16 @@ export function registrarWebhook(app: FastifyInstance, deps: DepsWebhook): void 
           req.log.debug({ instancia: instancia.nome, tipo: conversa.tipo, motivo: r.motivo }, 'evento descartado');
           return;
         }
+        // Urgência: só mensagem de texto do cliente em grupo (a privada não sai do servidor; o áudio
+        // ainda não é transcrito). Falha = sem classificação, que vale médio. O texto fica em memória.
+        let classificacao: Classificacao | null = null;
+        if (deps.classificador && conversa.tipo === 'grupo') {
+          const corpo = textoDaMensagem(payload);
+          if (previa.autor_tipo === 'cliente' && previa.conta && previa.tipo !== 'audio' && corpo.trim() !== '') {
+            classificacao = await deps.classificador.classificar({ jid: r.jid, texto: corpo });
+          }
+          deps.classificador.lembrar(r.jid, previa.autor_tipo, corpo);
+        }
         deps.fila.enfileirar({
           recebido_em,
           evento: 'messages',
@@ -82,7 +95,7 @@ export function registrarWebhook(app: FastifyInstance, deps: DepsWebhook): void 
             conversa.tipo === 'privada'
               ? sanitizarPayloadPrivada(payload)
               : sanitizarPayload(payload, { guardarTexto: false }),
-          mensagem: { ...previa, jid: r.jid },
+          mensagem: { ...previa, jid: r.jid, ...(classificacao ?? {}) },
         });
       };
 

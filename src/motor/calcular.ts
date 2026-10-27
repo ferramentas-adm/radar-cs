@@ -1,6 +1,7 @@
 // Motor de regras do Radar (função pura, sem I/O). Devolve a resposta de GET /api/radar no formato
 // de docs/api-contract.md. Mesma lógica do motor de demonstração do painel, com tempo de expediente.
-// Nesta fatia: só "sem resposta" (urgência fixa em médio) e "sem contato". Promessas e
+// Nesta fatia: "sem resposta" (cada mensagem no prazo do seu nível de urgência; sem classificação
+// vale médio) e "sem contato". Promessas e
 // "Registrar ação feita" ficam vazios e saem como recursos ausentes (recursos.* = false), para o
 // painel esconder o que ainda não existe em vez de mostrar zero.
 // Conversa privada nunca vira linha (alertas, pendentes, clientes, resumo): entra só nos números
@@ -9,6 +10,12 @@
 // só grupos, no máximo 20 itens com o total; só nome do grupo e nomes de especialista.
 import { planejarResponsaveis, type EntradaResponsaveis } from '../conversas/responsavel.js';
 import { inicioDoMes, somarDiasUteis, somarExpediente, type Calendario } from './expediente.js';
+
+export type Urgencia = 'alto' | 'medio' | 'baixo';
+export interface Prazo {
+  minutos_aviso: number;
+  minutos_gestor: number;
+}
 
 const MIN = 60_000;
 const SETE_DIAS = 7 * 24 * 60 * MIN;
@@ -34,6 +41,8 @@ export interface MensagemMotor {
   id_grupo: string;
   autor_tipo: 'cliente' | 'time';
   enviada_em: number; // ms
+  /** Só do cliente: nível dado pela IA. Ausente = não classificada, vale médio. */
+  urgencia?: Urgencia;
 }
 
 export interface EntradaMotor {
@@ -41,8 +50,10 @@ export interface EntradaMotor {
   grupos: GrupoMotor[];
   mensagens: MensagemMotor[];
   calendario: Calendario;
-  /** Prazo de "sem resposta" (nível médio de prazos_urgencia). */
-  prazo: { minutos_aviso: number; minutos_gestor: number };
+  /** Prazo de "sem resposta" do nível médio (prazos_urgencia); vale para quem não tem prazo do seu nível. */
+  prazo: Prazo;
+  /** Prazos por nível de urgência. Ausente = todos usam `prazo`. */
+  prazos?: Partial<Record<Urgencia, Prazo>>;
   observador: { status: 'conectado' | 'conectando' | 'desconectado'; desde: number | null };
   ultimaMensagemEm: number | null;
   usuario: { nome: string; pode_marcar: boolean; admin?: boolean };
@@ -51,6 +62,10 @@ export interface EntradaMotor {
 }
 
 type Nivel = 'aviso' | 'gestor';
+interface Pendente {
+  em: number;
+  urgencia: Urgencia;
+}
 type Estado = Nivel | 'ok' | 'resolvido_por_fora';
 /** Só o "sem resposta" do grupo, pela pendente mais antiga: ok = no prazo. */
 type EstadoPendente = Nivel | 'ok';
@@ -108,28 +123,44 @@ export function calcular(e: EntradaMotor) {
     const msgs = porGrupo.get(id) ?? [];
     let ultimaTime: number | null = null;
     for (const m of msgs) if (m.autor_tipo === 'time') ultimaTime = Math.max(ultimaTime ?? 0, m.enviada_em);
-    const fila = msgs
+    const fila: Pendente[] = msgs
       .filter((m) => m.autor_tipo === 'cliente' && (ultimaTime === null || m.enviada_em > ultimaTime))
-      .map((m) => m.enviada_em)
-      .sort((a, b) => a - b);
-    return { ultimaTime, fila };
+      .map((m) => ({ em: m.enviada_em, urgencia: m.urgencia ?? 'medio' }))
+      .sort((a, b) => a.em - b.em);
+    // No mesmo nível o prazo é o mesmo, então a mais antiga é a pior: só ela precisa de conta (no máximo 3).
+    const vistos = new Set<Urgencia>();
+    const candidatas = fila.filter((p) => (vistos.has(p.urgencia) ? false : (vistos.add(p.urgencia), true)));
+    return { ultimaTime, fila, candidatas };
+  };
+  /** Prazos de uma pendente, em tempo de expediente, pelo nível dela. */
+  const prazosDe = (p: Pendente) => {
+    const prazo = e.prazos?.[p.urgencia] ?? e.prazo;
+    return {
+      aviso: somarExpediente(p.em, prazo.minutos_aviso, e.calendario),
+      gestor: somarExpediente(p.em, prazo.minutos_gestor, e.calendario),
+    };
   };
 
   for (const g of grupos) {
-    const { ultimaTime, fila } = situacao(g.id_grupo);
+    const { ultimaTime, fila, candidatas } = situacao(g.id_grupo);
 
     const motivos: Motivo[] = [];
-    // Sem resposta: cada pendente corre no seu prazo; a mais antiga é a mais grave (mesmo nível).
-    // O mesmo nível vai para a pilha de mensagens (só o "sem resposta", sem o "sem contato").
+    // Sem resposta: cada pendente corre no prazo do seu nível; o alerta mostra a mais grave (gestor
+    // antes de aviso; entre iguais, a que sobe ao gestor primeiro). O mesmo nível vai para a pilha de
+    // mensagens (só o "sem resposta", sem o "sem contato").
     let estadoPendente: EstadoPendente = 'ok';
-    if (fila.length > 0) {
-      const t = fila[0]!;
-      const a = somarExpediente(t, e.prazo.minutos_aviso, e.calendario);
-      const k = somarExpediente(t, e.prazo.minutos_gestor, e.calendario);
-      if (ag >= a) {
-        estadoPendente = ag >= k ? 'gestor' : 'aviso';
-        motivos.push({ tipo: 'sem_resposta', nivel: estadoPendente, desde: iso(t), aviso_em: iso(a), gestor_em: iso(k) });
+    let pior: { p: Pendente; aviso: number; gestor: number; nivel: Nivel } | undefined;
+    for (const p of candidatas) {
+      const { aviso, gestor } = prazosDe(p);
+      if (ag < aviso) continue;
+      const nivel: Nivel = ag >= gestor ? 'gestor' : 'aviso';
+      if (!pior || (nivel === 'gestor' && pior.nivel === 'aviso') || (nivel === pior.nivel && gestor < pior.gestor)) {
+        pior = { p, aviso, gestor, nivel };
       }
+    }
+    if (pior) {
+      estadoPendente = pior.nivel;
+      motivos.push({ tipo: 'sem_resposta', nivel: pior.nivel, desde: iso(pior.p.em), aviso_em: iso(pior.aviso), gestor_em: iso(pior.gestor) });
     }
     // Sem contato: dias úteis desde a última do time (ou desde a entrada do observador).
     const base = ultimaTime ?? g.observador_entrou_em;
@@ -162,7 +193,7 @@ export function calcular(e: EntradaMotor) {
         cliente: g.cliente,
         especialista: g.especialista,
         quantidade: fila.length,
-        mais_antiga_desde: iso(fila[0]!),
+        mais_antiga_desde: iso(fila[0]!.em),
         estado: estadoPendente,
       });
     }
@@ -228,8 +259,8 @@ export function calcular(e: EntradaMotor) {
   const inicioMes = inicioDoMes(ag, e.calendario.expediente.fuso);
   for (const p of privadas) {
     const item = itemDe(p.especialista);
-    const { fila } = situacao(p.id_grupo);
-    if (fila.length > 0 && ag >= somarExpediente(fila[0]!, e.prazo.minutos_aviso, e.calendario)) {
+    const { candidatas } = situacao(p.id_grupo);
+    if (candidatas.some((c) => ag >= prazosDe(c).aviso)) {
       item.conversas_privadas_sem_resposta++;
     }
     const ultima = p.ultima_atividade_em ?? null;

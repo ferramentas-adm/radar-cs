@@ -1,6 +1,7 @@
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { registrarPainel, type DepsPainel } from './api/painel.js';
 import type { Cadastro } from './cadastro.js';
+import type { Classificador } from './classificador/classificador.js';
 import type { GatilhoEstado } from './instancias/alerta.js';
 import type { InstanciaConfig } from './config.js';
 import { Cadastrador, type DepsCadastrador } from './conversas/cadastrador.js';
@@ -20,6 +21,8 @@ export interface DepsApp {
   arquivoPendentes: string;
   esperaBaseMs?: number;
   logger?: OpcoesLogger;
+  /** Classificação de urgência das mensagens do cliente. Sem isto, tudo vale médio. */
+  classificador?: Classificador;
   /** Estado de conexão das instâncias (eventos "connection"). */
   estado?: GatilhoEstado;
   /** Página e GET /api/radar. Sem isto, só o receptor do webhook. */
@@ -72,6 +75,7 @@ export function buildApp(deps: DepsApp): { app: FastifyInstance; fila: FilaGrava
     cadastro: deps.cadastro,
     conversas: new Cadastrador({ ...deps.conversas, cadastro: deps.cadastro, log: app.log }),
     fila,
+    ...(deps.classificador ? { classificador: deps.classificador } : {}),
     ...(deps.estado ? { estado: deps.estado } : {}),
   });
 

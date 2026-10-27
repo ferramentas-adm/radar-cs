@@ -6,17 +6,19 @@
 // O mapeamento (montarDadosRadar) é puro e é o mesmo do carregamento antigo (dados-legado.ts).
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Expediente } from '../motor/expediente.js';
-import type { EntradaMotor, GrupoMotor, MensagemMotor } from '../motor/calcular.js';
+import type { EntradaMotor, GrupoMotor, MensagemMotor, Prazo, Urgencia } from '../motor/calcular.js';
 import type { MembroResponsavel } from '../conversas/responsavel.js';
 
 export type DadosRadar = Pick<
   EntradaMotor,
-  'grupos' | 'mensagens' | 'calendario' | 'prazo' | 'ultimaMensagemEm' | 'responsaveis'
+  'grupos' | 'mensagens' | 'calendario' | 'prazo' | 'prazos' | 'ultimaMensagemEm' | 'responsaveis'
 >;
 
 interface MensagemJson {
   id_mensagem: string;
   enviada_em: string;
+  /** Só nas pendentes do cliente; nulo = não classificada (vale médio). */
+  urgencia?: Urgencia | null;
 }
 
 /** Formato do jsonb devolvido por public.radar_dados(). */
@@ -35,7 +37,9 @@ export interface RadarDadosJson {
   }[];
   expediente: Expediente;
   feriados: string[];
-  prazo: { minutos_aviso: number; minutos_gestor: number };
+  prazo: Prazo;
+  /** Prazos dos três níveis. Ausente em banco que ainda não tem a migration da classificação. */
+  prazos?: (Prazo & { urgencia: Urgencia })[];
   ultima_mensagem_em: string | null;
   presencas: { jid: string; instancia: string }[];
   time: MembroResponsavel[];
@@ -64,7 +68,13 @@ export function montarDadosRadar(j: RadarDadosJson): DadosRadar {
       mensagens.push({ id_mensagem: c.ultima_time.id_mensagem, id_grupo: c.jid, autor_tipo: 'time', enviada_em: Date.parse(c.ultima_time.enviada_em) });
     }
     for (const m of c.pendentes) {
-      mensagens.push({ id_mensagem: m.id_mensagem, id_grupo: c.jid, autor_tipo: 'cliente', enviada_em: Date.parse(m.enviada_em) });
+      mensagens.push({
+        id_mensagem: m.id_mensagem,
+        id_grupo: c.jid,
+        autor_tipo: 'cliente',
+        enviada_em: Date.parse(m.enviada_em),
+        ...(m.urgencia ? { urgencia: m.urgencia } : {}),
+      });
     }
   }
   return {
@@ -75,6 +85,13 @@ export function montarDadosRadar(j: RadarDadosJson): DadosRadar {
       feriados: new Set(j.feriados),
     },
     prazo: j.prazo,
+    ...(j.prazos && j.prazos.length > 0
+      ? {
+          prazos: Object.fromEntries(
+            j.prazos.map((p) => [p.urgencia, { minutos_aviso: p.minutos_aviso, minutos_gestor: p.minutos_gestor }]),
+          ),
+        }
+      : {}),
     ultimaMensagemEm: j.ultima_mensagem_em ? Date.parse(j.ultima_mensagem_em) : null,
     responsaveis: {
       // Só grupos (privada nunca entra na regra do responsável), com os valores crus do banco.

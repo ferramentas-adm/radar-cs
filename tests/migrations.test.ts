@@ -47,7 +47,8 @@ describe('migrations', () => {
 
   describe('funções rpc (troca de presença e de responsável)', () => {
     const funcoes = [...sql.matchAll(/create (?:or replace )?function public\.(\w+)\(([^)]*)\)([\s\S]*?)\$\$;/gi)];
-    const rpc = funcoes.filter((f) => ['substituir_presencas', 'trocar_responsavel', 'radar_dados'].includes(f[1]!));
+    // radar_dados é redefinida por migrations novas (create or replace): vale a última definição.
+    const rpc = [...new Map(funcoes.filter((f) => ['substituir_presencas', 'trocar_responsavel', 'radar_dados'].includes(f[1]!)).map((f) => [f[1]!, f])).values()];
 
     it('existem as três', () => {
       expect(rpc.map((f) => f[1])).toEqual(['substituir_presencas', 'trocar_responsavel', 'radar_dados']);
@@ -64,7 +65,7 @@ describe('migrations', () => {
           new RegExp(`revoke execute on function public\\.${nome}\\([^)]*\\)\\s+from public, anon, authenticated;`, 'i'),
         );
         const grants = [...sql.matchAll(new RegExp(`grant execute on function public\\.${nome}\\([^)]*\\) to (\\w+);`, 'gi'))];
-        expect(grants.map((g) => g[1]), nome).toEqual(['service_role']);
+        expect([...new Set(grants.map((g) => g[1]))], nome).toEqual(['service_role']);
       }
     });
 

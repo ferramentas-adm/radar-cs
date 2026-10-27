@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { servicoAdminSupabase } from './api/admin.js';
 import { CacheRadar } from './api/cache.js';
 import { carregarDadosRadar } from './api/dados.js';
+import { criarClassificador } from './classificador/classificador.js';
 import { CacheCadastro, carregadorSupabase } from './cadastro.js';
 import { ErroConfig, lerConfig } from './config.js';
 import { criarClienteSupabase } from './db/supabase.js';
@@ -24,6 +25,7 @@ const ARQUIVO_PENDENTES = 'var/eventos-pendentes.jsonl';
 const ARQUIVO_DEV = 'var/eventos-dev.jsonl';
 const ARQUIVO_PAINEL = 'frontend/index.html';
 const ARQUIVO_ADMIN = 'frontend/admin.html';
+const ARQUIVO_PROMPT_CLASSIFICADOR = 'prompts/classificador.md';
 const RECARGA_CADASTRO_MS = 60_000;
 const CONSULTA_STATUS_MS = 2 * 60_000;
 const RECONCILIA_MS = 5 * 60_000;
@@ -120,6 +122,17 @@ async function main(): Promise<void> {
       }
     : undefined;
 
+  // Classificador de urgência: só com CLASSIFICADOR_ATIVO=true e a chave da Anthropic. O texto das
+  // mensagens do cliente (só de grupo) vai à API e não é guardado.
+  const classificador = config.classificador
+    ? criarClassificador({
+        chave: config.classificador.chave,
+        modelo: config.classificador.modelo,
+        prompt: await readFile(ARQUIVO_PROMPT_CLASSIFICADOR, 'utf8'),
+        log: { warn: (obj, msg) => app?.log.warn(obj, msg) },
+      })
+    : undefined;
+
   const montado = buildApp({
     segredo: config.webhookSegredo,
     instancias: config.instancias,
@@ -127,6 +140,7 @@ async function main(): Promise<void> {
     repo,
     arquivoPendentes: ARQUIVO_PENDENTES,
     estado: estadoComGanchos,
+    ...(classificador ? { classificador } : {}),
     ...(painel ? { painel } : {}),
     ...(conversas ? { conversas } : {}),
   });
@@ -198,6 +212,7 @@ async function main(): Promise<void> {
 
   // Só localhost: o túnel (e depois o proxy do servidor) é quem expõe para fora.
   await app.listen({ host: '127.0.0.1', port: config.porta });
+  app.log.info({ classificador: classificador ? config.classificador?.modelo : 'desligado' }, 'classificador de urgência');
   app.log.info(
     { destino: semBanco ? ARQUIVO_DEV : 'supabase', instancias: config.instancias.map((i) => i.nome) },
     'receptor do webhook no ar',
