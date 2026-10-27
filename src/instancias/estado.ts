@@ -37,6 +37,11 @@ export class EstadoInstancias {
     if (atual?.status !== status) this.estados.set(nome, { status, desde: agora });
   }
 
+  /** Status desta instância, ou undefined se ainda sem notícia dela. */
+  statusDe(nome: string): StatusPainel | undefined {
+    return this.estados.get(nome)?.status;
+  }
+
   /** O pior status entre as instâncias. Instância ainda sem notícia conta como desconectada. */
   resumo(): { status: StatusPainel; desde: number | null } {
     let pior: { status: StatusPainel; desde: number | null } = { status: 'conectado', desde: null };

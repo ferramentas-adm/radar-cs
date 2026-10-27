@@ -6,7 +6,10 @@ import { CacheCadastro, carregadorSupabase } from './cadastro.js';
 import { ErroConfig, lerConfig } from './config.js';
 import { criarClienteSupabase } from './db/supabase.js';
 import { carregarEnv } from './env.js';
+import { comGanchos } from './instancias/alerta.js';
 import { EstadoInstancias } from './instancias/estado.js';
+import { reconciliarTodas } from './instancias/reconciliar.js';
+import { registrarStatus } from './instancias/sync.js';
 import { calcular } from './motor/calcular.js';
 import { gravarConversaSupabase, RepositorioArquivo, RepositorioSupabase } from './repositorio.js';
 import { buildApp } from './server.js';
@@ -21,6 +24,7 @@ const ARQUIVO_DEV = 'var/eventos-dev.jsonl';
 const ARQUIVO_PAINEL = 'frontend/index.html';
 const RECARGA_CADASTRO_MS = 60_000;
 const CONSULTA_STATUS_MS = 2 * 60_000;
+const RECONCILIA_MS = 5 * 60_000;
 
 async function main(): Promise<void> {
   carregarEnv();
@@ -51,6 +55,22 @@ async function main(): Promise<void> {
   );
 
   const estado = new EstadoInstancias(config.instancias.map((i) => i.nome));
+  // Passo 5 (saúde): persiste o status por instância e avisa (hoje só por log; sem provedor de
+  // e-mail configurado) quando uma instância que estava conectada cai.
+  const estadoComGanchos = comGanchos(estado, {
+    ...(db
+      ? {
+          aoRegistrar: (nome: string, status: string) => {
+            void registrarStatus(db, nome, status).catch((e: unknown) =>
+              app?.log.warn({ instancia: nome, erro: (e as Error).message }, 'falha ao gravar status em sync_estado'),
+            );
+          },
+        }
+      : {}),
+    aoCair: (nome: string) => {
+      app?.log.error({ instancia: nome }, 'ALERTA GESTOR: instância desconectada');
+    },
+  });
   const painelCfg = config.painel;
   // Uma consulta ao banco a cada 30 s, no máximo, por mais painéis que estejam abertos.
   const cacheRadar = db ? new CacheRadar(() => carregarDadosRadar(db)) : undefined;
@@ -92,7 +112,7 @@ async function main(): Promise<void> {
     cadastro,
     repo,
     arquivoPendentes: ARQUIVO_PENDENTES,
-    estado,
+    estado: estadoComGanchos,
     ...(painel ? { painel } : {}),
     ...(conversas ? { conversas } : {}),
   });
@@ -116,10 +136,10 @@ async function main(): Promise<void> {
       if (!cliente) break;
       try {
         const { status } = await cliente.instanceStatus();
-        estado.registrar(i.nome, status, Date.now());
+        estadoComGanchos.registrar(i.nome, status, Date.now());
       } catch (e) {
         // Sem resposta da uazapi não dá para afirmar que está conectada.
-        estado.registrar(i.nome, 'desconhecido', Date.now());
+        estadoComGanchos.registrar(i.nome, 'desconhecido', Date.now());
         app?.log.warn({ instancia: i.nome, erro: (e as Error).message }, 'falha ao consultar status');
       }
     }
@@ -134,6 +154,21 @@ async function main(): Promise<void> {
   const timerStatus = setInterval(() => void consultarStatus(), CONSULTA_STATUS_MS);
   timerStatus.unref();
 
+  // Passo 5 (reconciliação): ao subir e a cada poucos minutos, busca o que o webhook não entregou.
+  const reconciliar = async () => {
+    if (!db) return;
+    const resumos = await reconciliarTodas(db, config.instancias, clientes, config.chaves?.cifra, (instancia, e) => {
+      app?.log.warn({ instancia, erro: (e as Error).message }, 'falha ao reconciliar instância');
+    });
+    const conversas = resumos.reduce((n, r) => n + r.conversas, 0);
+    const falhas = resumos.reduce((n, r) => n + r.falhas, 0);
+    const novas = resumos.reduce((n, r) => n + r.novas, 0);
+    app?.log.info({ instancias: resumos.length, conversas, conversas_com_falha: falhas, mensagens_recuperadas: novas }, 'reconciliação');
+  };
+  await reconciliar();
+  const timerReconciliar = setInterval(() => void reconciliar(), RECONCILIA_MS);
+  timerReconciliar.unref();
+
   let encerrando = false;
   const encerrar = async (sinal: string) => {
     if (encerrando) return;
@@ -141,6 +176,7 @@ async function main(): Promise<void> {
     app?.log.info({ sinal, gravacoes_em_andamento: fila.pendentes }, 'encerrando');
     cadastro.parar();
     clearInterval(timerStatus);
+    clearInterval(timerReconciliar);
     await app?.close();
     await fila.esvaziar();
     process.exit(0);

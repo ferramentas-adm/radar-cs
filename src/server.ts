@@ -1,7 +1,7 @@
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { registrarPainel, type DepsPainel } from './api/painel.js';
 import type { Cadastro } from './cadastro.js';
-import type { EstadoInstancias } from './instancias/estado.js';
+import type { GatilhoEstado } from './instancias/alerta.js';
 import type { InstanciaConfig } from './config.js';
 import { Cadastrador, type DepsCadastrador } from './conversas/cadastrador.js';
 import type { RepositorioEventos } from './repositorio.js';
@@ -21,7 +21,7 @@ export interface DepsApp {
   esperaBaseMs?: number;
   logger?: OpcoesLogger;
   /** Estado de conexão das instâncias (eventos "connection"). */
-  estado?: EstadoInstancias;
+  estado?: GatilhoEstado;
   /** Página e GET /api/radar. Sem isto, só o receptor do webhook. */
   painel?: DepsPainel;
   /** Cadastro automático (chaves, /group/info, gravação). Sem isto, só conversas já cadastradas passam. */
