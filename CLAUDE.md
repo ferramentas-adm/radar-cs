@@ -121,7 +121,7 @@ Nomes de domínio em português, como na especificação. **Diferenças de nome 
 - `prazos_urgencia`: tabela de configuração com os prazos de "sem resposta" por nível (`urgencia`, `minutos_aviso`, `minutos_gestor`). Mudar prazo é mudar linha, não código. Só administrador edita.
 - `config_expediente`: uma linha só, com `hora_inicio`, `hora_fim`, `dias_uteis` e `fuso` (hoje 9h, 19h, seg–sex, `America/Sao_Paulo`). Nada de expediente fixo no código. Só administrador edita.
 - `feriados`: `data`, `descricao`. O relógio para nesses dias. Só administrador edita.
-- Papel de administrador por usuário (`perfis.papel` = `admin`|`comum`). As tabelas de configuração só aceitam escrita de administrador, garantido por RLS **e** pela API (o painel passa pela API, então a checagem de papel na API é obrigatória; esconder na tela não basta).
+- Papel de administrador (hoje: conta de administrador do painel, `PAINEL_ADMIN_*`; `perfis.papel` = `admin`|`comum` para quando houver login individual). As tabelas de configuração só aceitam escrita de administrador, garantido por RLS **e** pela API (o painel passa pela API, então a checagem de papel na API é obrigatória; esconder na tela não basta).
 - `promessas`: `id`, `jid` (referência a `grupos.jid`), `especialista`, `promessa`, `prazo`, `criada_em`, `status` (`aberta`|`cumprida`), `id_mensagem_origem`.
 - `marcacoes`: histórico de "Resolvi por fora" (nunca apagar): `id`, `id_grupo`, `marcado_por`, `como` (`ligacao`|`privado`|`reuniao`), `marcado_em`, `encerrada_em`, `encerrada_por` (`mensagem_no_grupo`|`desfeita`|`expirou`).
 - `eventos_brutos`: payloads (sem o `token`) só durante a fase de descoberta. Remover depois.
@@ -243,7 +243,7 @@ Cada passo termina com testes passando e algo que dá para ver funcionando.
 7. **IA dos retornos.**
 8. **`GET /api/radar` conforme `docs/api-contract.md`** (monta a resposta a partir do motor, das marcações, das promessas e do estado do observador), servir o `frontend/index.html` com `RADAR_CONFIG`, avisos e resumo das 18h. Conferir o painel contra a API com dados reais, incluindo a faixa vermelha quando o observador cai.
 9. **Deploy na Hostinger** e troca do túnel pela URL definitiva do webhook.
-10. **Tela de configurações (só administrador).** Editar `config_expediente`, `feriados` e `prazos_urgencia` pelo painel. Papel de administrador, RLS e checagem na API; usuário comum não vê a tela nem consegue gravar. Até lá, a configuração muda por migration.
+10. **Tela de configurações (só administrador) — feita.** `GET /admin` (`frontend/admin.html`) e `/api/admin/*` (contrato em `docs/api-contract.md`) editam `config_expediente`, `feriados` e `prazos_urgencia`. O papel de administrador vem de uma **segunda conta de autenticação básica** (`PAINEL_ADMIN_USUARIO`/`PAINEL_ADMIN_SENHA`, opcionais, diferentes da conta comum); o servidor confere o papel em toda chamada (`401` sem login, `403` conta comum) e, sem a conta no `.env`, a tela e a API respondem 404. O backend grava com a service role (o RLS de `eh_admin()` continua valendo para qualquer acesso direto). Gravou, o cache de 30 s do radar é descartado. Hoje o motor usa só o prazo do nível `medio`; `alto` e `baixo` já podem ser editados e valem quando o classificador (3b) entrar. `perfis`/Supabase Auth por usuário fica para quando o painel tiver login individual.
 
 ## Casos de teste do motor (mínimo)
 
@@ -317,7 +317,7 @@ Os casos de limite (19/20/31 min, 23h59/24h/48h etc.) valem **dentro do expedien
 ## Regras de trabalho
 
 - **Nunca ler nem editar o `.env`.**
-- **Nunca fazer commit nem push sem pedido explícito.**
+- **Commit e push liberados** (decisão do responsável): ao terminar uma tarefa, com `npm test` e `npm run typecheck` passando, pode commitar e dar push em `main`. Nunca `--force`, nunca `--no-verify`, nunca commitar `.env` nem `var/`.
 - **Nunca rodar** `db:push`, `webhook:configurar`, `grupos:varrer`, `mensagens:historico`, `conversas:*`, `time:importar` nem `radar:comparar`: quem roda é o responsável pelo projeto.
 - Todo comando que grava é **simulação por padrão**; `--gravar` só é usado pelo responsável.
 - **No fim de cada tarefa:** rodar `npm test` e `npm run typecheck`, gravar o resumo e o diff em `var\revisao-<tema>.md` (a pasta `var/` é ignorada pelo git) e **parar**.

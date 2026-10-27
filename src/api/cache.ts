@@ -15,16 +15,30 @@ export class CacheRadar<T> {
     private readonly agora: () => number = Date.now,
   ) {}
 
+  private geracao = 0;
+
+  /** Descarta o que está guardado (a configuração mudou): a próxima leitura vai ao banco. */
+  invalidar(): void {
+    this.geracao++;
+    this.valor = undefined;
+    this.emAndamento = undefined;
+  }
+
   obter(): Promise<T> {
     if (this.valor && this.agora() - this.valor.em < this.ttlMs) return Promise.resolve(this.valor.dados);
-    this.emAndamento ??= this.carregar()
-      .then((dados) => {
-        this.valor = { dados, em: this.agora() };
-        return dados;
-      })
-      .finally(() => {
-        this.emAndamento = undefined;
-      });
+    if (!this.emAndamento) {
+      const g = this.geracao;
+      const consulta: Promise<T> = this.carregar()
+        .then((dados) => {
+          // Consulta que começou antes de um invalidar() pode trazer dados velhos: não guarda.
+          if (g === this.geracao) this.valor = { dados, em: this.agora() };
+          return dados;
+        })
+        .finally(() => {
+          if (this.emAndamento === consulta) this.emAndamento = undefined;
+        });
+      this.emAndamento = consulta;
+    }
     return this.emAndamento;
   }
 }

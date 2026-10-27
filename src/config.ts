@@ -23,8 +23,11 @@ export interface Config {
   uazapiBaseUrl: string | undefined;
   webhookUrlPublica: string | undefined;
   supabase: { url: string; serviceRoleKey: string } | undefined;
-  /** Autenticação básica da página e da API (obrigatória quando há banco). */
-  painel: { usuario: string; senha: string } | undefined;
+  /**
+   * Autenticação básica da página e da API (obrigatória quando há banco). `admin` é a conta de
+   * administrador da tela de configurações (opcional: sem ela, a tela de configurações fica desligada).
+   */
+  painel: { usuario: string; senha: string; admin?: { usuario: string; senha: string } } | undefined;
   /** Chaves da conversa privada (obrigatórias quando há banco). */
   chaves: ChavesConversa | undefined;
   /** Chave de telefone do número observador (ignorado ao classificar grupo interno). */
@@ -52,6 +55,8 @@ const esquema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: opcional(z.string().min(1)),
   PAINEL_USUARIO: opcional(z.string().min(1).regex(/^[^:]+$/)),
   PAINEL_SENHA: opcional(z.string().min(16)),
+  PAINEL_ADMIN_USUARIO: opcional(z.string().min(1).regex(/^[^:]+$/)),
+  PAINEL_ADMIN_SENHA: opcional(z.string().min(16)),
   RADAR_CHAVE_CONVERSA: opcional(z.string().refine((v) => lerChave(v) !== undefined)),
   RADAR_CHAVE_CIFRA: opcional(z.string().refine((v) => lerChave(v) !== undefined)),
   OBSERVADOR_NUMERO: opcional(z.string().regex(/^\+?[0-9 ()-]{12,}$/)),
@@ -68,6 +73,8 @@ const DESCRICAO: Record<string, string> = {
   SUPABASE_SERVICE_ROLE_KEY: 'inválido',
   PAINEL_USUARIO: 'inválido (não pode ter ":")',
   PAINEL_SENHA: 'precisa ter pelo menos 16 caracteres',
+  PAINEL_ADMIN_USUARIO: 'inválido (não pode ter ":")',
+  PAINEL_ADMIN_SENHA: 'precisa ter pelo menos 16 caracteres',
   RADAR_CHAVE_CONVERSA: 'precisa ser Base64 de 32 bytes (44 caracteres; veja o comando no .env.example)',
   RADAR_CHAVE_CIFRA: 'precisa ser Base64 de 32 bytes (44 caracteres; veja o comando no .env.example)',
   OBSERVADOR_NUMERO: 'precisa ser 55 + DDD + número',
@@ -121,6 +128,20 @@ export function lerConfig(env: NodeJS.ProcessEnv, opcoes: { exigirBanco: boolean
       if (!env[nome]?.trim()) problemas.push(`${nome}: obrigatório (ou rode com --sem-banco)`);
     }
   }
+  // Conta de administrador: usuário e senha juntos, e diferentes da conta comum (senão o papel não separa nada).
+  const temAdminUsuario = !!env.PAINEL_ADMIN_USUARIO?.trim();
+  const temAdminSenha = !!env.PAINEL_ADMIN_SENHA?.trim();
+  if (temAdminUsuario !== temAdminSenha) {
+    problemas.push('PAINEL_ADMIN_USUARIO e PAINEL_ADMIN_SENHA: informe os dois ou nenhum');
+  }
+  if (temAdminUsuario && temAdminSenha) {
+    if (env.PAINEL_ADMIN_USUARIO!.trim() === env.PAINEL_USUARIO?.trim()) {
+      problemas.push('PAINEL_ADMIN_USUARIO: precisa ser diferente de PAINEL_USUARIO');
+    }
+    if (env.PAINEL_ADMIN_SENHA!.trim() === env.PAINEL_SENHA?.trim()) {
+      problemas.push('PAINEL_ADMIN_SENHA: precisa ser diferente de PAINEL_SENHA');
+    }
+  }
   const conversa = lerChave(env.RADAR_CHAVE_CONVERSA);
   const cifra = lerChave(env.RADAR_CHAVE_CIFRA);
   if (conversa && cifra && conversa.equals(cifra)) {
@@ -142,7 +163,15 @@ export function lerConfig(env: NodeJS.ProcessEnv, opcoes: { exigirBanco: boolean
         ? { url: e.SUPABASE_URL, serviceRoleKey: e.SUPABASE_SERVICE_ROLE_KEY }
         : undefined,
     painel:
-      e.PAINEL_USUARIO && e.PAINEL_SENHA ? { usuario: e.PAINEL_USUARIO, senha: e.PAINEL_SENHA } : undefined,
+      e.PAINEL_USUARIO && e.PAINEL_SENHA
+        ? {
+            usuario: e.PAINEL_USUARIO,
+            senha: e.PAINEL_SENHA,
+            ...(e.PAINEL_ADMIN_USUARIO && e.PAINEL_ADMIN_SENHA
+              ? { admin: { usuario: e.PAINEL_ADMIN_USUARIO, senha: e.PAINEL_ADMIN_SENHA } }
+              : {}),
+          }
+        : undefined,
     chaves: conversa && cifra ? { conversa, cifra } : undefined,
     observadorNumero: e.OBSERVADOR_NUMERO ? chaveTelefone(e.OBSERVADOR_NUMERO) : undefined,
   };

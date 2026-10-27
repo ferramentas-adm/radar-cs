@@ -45,7 +45,7 @@ export interface EntradaMotor {
   prazo: { minutos_aviso: number; minutos_gestor: number };
   observador: { status: 'conectado' | 'conectando' | 'desconectado'; desde: number | null };
   ultimaMensagemEm: number | null;
-  usuario: { nome: string; pode_marcar: boolean };
+  usuario: { nome: string; pode_marcar: boolean; admin?: boolean };
   /** Presença, time e varreduras (sem agora). Ausente = lista "aguardando definição" vazia. */
   responsaveis?: Omit<EntradaResponsaveis, 'agora'>;
 }

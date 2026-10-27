@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
+import { servicoAdminSupabase } from './api/admin.js';
 import { CacheRadar } from './api/cache.js';
 import { carregarDadosRadar } from './api/dados.js';
 import { CacheCadastro, carregadorSupabase } from './cadastro.js';
@@ -22,6 +23,7 @@ import { ClienteUazapi } from './uazapi/cliente.js';
 const ARQUIVO_PENDENTES = 'var/eventos-pendentes.jsonl';
 const ARQUIVO_DEV = 'var/eventos-dev.jsonl';
 const ARQUIVO_PAINEL = 'frontend/index.html';
+const ARQUIVO_ADMIN = 'frontend/admin.html';
 const RECARGA_CADASTRO_MS = 60_000;
 const CONSULTA_STATUS_MS = 2 * 60_000;
 const RECONCILIA_MS = 5 * 60_000;
@@ -80,13 +82,25 @@ async function main(): Promise<void> {
           usuario: painelCfg.usuario,
           senha: painelCfg.senha,
           html: await readFile(ARQUIVO_PAINEL, 'utf8'),
-          radar: async (usuario: string) =>
+          radar: async (usuario: string, admin: boolean) =>
             calcular({
               ...(await cacheRadar.obter()),
               agora: Date.now(),
               observador: estado.resumo(),
-              usuario: { nome: usuario, pode_marcar: false }, // "Registrar ação feita" fora desta fatia
+              usuario: { nome: usuario, pode_marcar: false, admin }, // "Registrar ação feita" fora desta fatia
             }),
+          // Tela de configurações: só com a conta de administrador no .env. Gravou, o cache do radar
+          // é descartado para o expediente, os feriados e os prazos novos valerem já no próximo pedido.
+          ...(db && painelCfg.admin
+            ? {
+                admin: {
+                  usuario: painelCfg.admin.usuario,
+                  senha: painelCfg.admin.senha,
+                  html: await readFile(ARQUIVO_ADMIN, 'utf8'),
+                  servico: servicoAdminSupabase(db, () => cacheRadar.invalidar()),
+                },
+              }
+            : {}),
         }
       : undefined;
 

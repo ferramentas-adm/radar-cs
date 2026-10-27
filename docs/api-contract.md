@@ -133,6 +133,7 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 |---|---|
 | `recursos` | `{ marcacoes, promessas }`, booleanos: o que o backend já implementa. `false` (ou campo ausente) = ainda não existe, e o painel **esconde** a parte em vez de mostrar zero. `marcacoes: false` esconde a seção "Ações feitas por fora", a frase "Agiu por ligação, privado ou reunião? Depois de agir, registre a ação aqui", o botão "Registrar ação feita", o item "ação feita por fora" da legenda e a regra da ação feita por fora no rodapé. `promessas: false` esconde a seção "Retornos prometidos", o cartão "Retornos vencidos", a coluna "Retornos vencidos" da tabela por especialista e a regra do retorno vencido no rodapé. Hoje o backend manda os dois `false`; a demonstração do painel, os dois `true`. Com `false`, `resolvidos_por_fora` e `retornos` vêm `[]` e `retornos_vencidos` vem `0`. |
 | `usuario.pode_marcar` | `true` mostra o botão "Registrar ação feita". Só especialistas e gestores. |
+| `usuario.admin` | `true` só quando a autenticação foi com a conta de administrador: o painel mostra o link "Configurações" (`/admin`). Campo ausente ou `false` esconde o link. Só conveniência de tela: a API de administração confere o papel em toda chamada. |
 | `observador.status` | `conectado`, `conectando` ou `desconectado` (vem de `GET /instance/status` da uazapi). Qualquer valor diferente de `conectado` faz o painel mostrar a faixa vermelha de aviso e **nunca** "Tudo em dia". |
 | `observador.desde` | Quando o status atual começou (usado na faixa de aviso). |
 | `alertas[].nivel` | `aviso` (especialista) ou `gestor`. Se `voltou_de_marcacao` não for nulo, é sempre `gestor`. |
@@ -193,3 +194,30 @@ Desfaz a marcação válida do grupo. `204` em sucesso. Só quem marcou, ou um g
 ## Erros
 
 Qualquer resposta que não seja `2xx` em `GET /api/radar` faz o painel manter os últimos dados e mostrar a faixa "Radar sem conexão com o servidor". O painel nunca apaga a tela por erro de rede.
+
+## API de administração (tela de configurações, só administrador)
+
+Fora do que o painel de leitura usa. Só existe com `PAINEL_ADMIN_USUARIO` e `PAINEL_ADMIN_SENHA` no `.env` (sem elas, tudo abaixo responde 404). Autenticação básica, como o resto. **Papel checado no servidor em toda chamada:** sem login `401`; login da conta comum `403 { "erro": "Sem permissão de administrador." }`. Erros de entrada: `400 { "erro": "mensagem em português" }`. Falha do banco: `500 { "erro": "erro interno" }`. Gravou, o cache dos dados do radar é descartado (vale já no próximo `GET /api/radar`).
+
+| Chamada | Corpo | Resposta |
+|---|---|---|
+| `GET /admin` | | a página `frontend/admin.html` (conta comum: `401` com `WWW-Authenticate`, para entrar de novo como administrador) |
+| `GET /api/admin/config` | | `200 { expediente, prazos, feriados }` |
+| `PUT /api/admin/expediente` | `{ hora_inicio: "09:00", hora_fim: "19:00", dias_uteis: [1,2,3,4,5], fuso: "America/Sao_Paulo" }` | `200` o expediente salvo. Fim depois do início; dias de 1 (segunda) a 7 (domingo), ao menos um; fuso IANA válido. |
+| `PUT /api/admin/prazos/:urgencia` | `{ minutos_aviso, minutos_gestor }` | `200 { urgencia, minutos_aviso, minutos_gestor }`. `urgencia` = `alto`, `medio` ou `baixo`; inteiros de 1 a 10080; gestor maior que aviso. Hoje o motor usa só o `medio`. |
+| `PUT /api/admin/feriados/:data` | `{ descricao }` (até 120 caracteres) | `200 { data, descricao }`. `:data` = `AAAA-MM-DD`; cria ou atualiza. |
+| `DELETE /api/admin/feriados/:data` | (sem corpo; não mandar `Content-Type`) | `204` |
+
+`GET /api/admin/config`:
+
+```json
+{
+  "expediente": { "hora_inicio": "09:00", "hora_fim": "19:00", "dias_uteis": [1, 2, 3, 4, 5], "fuso": "America/Sao_Paulo" },
+  "prazos": [
+    { "urgencia": "alto", "minutos_aviso": 10, "minutos_gestor": 15 },
+    { "urgencia": "medio", "minutos_aviso": 20, "minutos_gestor": 31 },
+    { "urgencia": "baixo", "minutos_aviso": 60, "minutos_gestor": 90 }
+  ],
+  "feriados": [{ "data": "2026-12-25", "descricao": "Natal" }]
+}
+```

@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Configurações · Radar CS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#0A0A0A; --card:#141414; --card2:#1B1B1A; --line:#262626; --fg:#F4F4EE; --mut:#9A9A92;
+  --lime:#C8E000; --red:#FF5A4F; --amber:#FFB020;
+  --display:"Anton","Impact","Arial Narrow Bold",sans-serif;
+  --body:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{font-size:16px}
+[hidden]{display:none!important}
+body{margin:0;background-color:var(--bg);background-image:radial-gradient(60rem 30rem at 90% -10%,rgba(200,224,0,.10),transparent 60%),radial-gradient(40rem 24rem at -10% 110%,rgba(200,224,0,.06),transparent 60%);background-attachment:fixed;color:var(--fg);font-family:var(--body);font-size:1rem;line-height:1.4}
+.rc{display:flex;flex-direction:column;gap:clamp(1rem,2vw,1.75rem);padding-block:clamp(1rem,3vw,2.5rem);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:60rem;margin-inline:auto}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:1rem}
+.brand{font-family:var(--mono);font-size:.75rem;letter-spacing:.14em;text-transform:uppercase;color:var(--lime)}
+h1{font-family:var(--display);font-weight:400;text-transform:uppercase;line-height:.9;font-size:clamp(2.25rem,6vw,4.5rem);margin:.4rem 0 0;text-wrap:balance}
+h2{font-family:var(--display);font-weight:400;text-transform:uppercase;font-size:clamp(1.5rem,2.4vw,2.25rem);margin:0;line-height:1}
+button{font:inherit;cursor:pointer}
+.card{background:var(--card);border:1px solid var(--line);border-radius:.75rem;padding:clamp(.875rem,1.6vw,1.5rem);min-width:0}
+.note{font-size:.8125rem;color:var(--mut);margin:.375rem 0 .875rem}
+.lbl{font-family:var(--mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.link{background:none;border:0;color:var(--mut);font-family:var(--mono);font-size:.75rem;text-decoration:underline;padding:.5rem .25rem}
+a.link{display:inline-block}
+.link:hover{color:var(--lime)}
+.tick{font-family:var(--mono);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;color:var(--lime);background:transparent;border:1px solid var(--lime);border-radius:.5rem;padding:.5rem .75rem;white-space:nowrap}
+.tick:hover{background:rgba(200,224,0,.12)}
+.tick:disabled{opacity:.4;cursor:not-allowed}
+.tick.danger{color:var(--red);border-color:var(--red)}
+.tick.danger:hover{background:rgba(255,90,79,.12)}
+.chip{font-family:var(--mono);font-size:.75rem;color:var(--fg);background:#1E1E1E;border:1px solid var(--line);border-radius:.5rem;padding:.5rem .625rem;display:inline-flex;align-items:center;gap:.4rem;cursor:pointer}
+.chip:hover{border-color:var(--lime);color:var(--lime)}
+.chip:has(input:checked){border-color:var(--lime);color:var(--lime);background:rgba(200,224,0,.12)}
+.chip:has(input:focus-visible){outline:2px solid var(--lime);outline-offset:2px}
+.chip input{accent-color:var(--lime);margin:0}
+.tick:focus-visible,.link:focus-visible,input:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
+.fld{display:flex;flex-direction:column;gap:.35rem;min-width:0}
+.fld input[type=time],.fld input[type=text],.fld input[type=date],.fld input[type=number],td input[type=number]{font:inherit;font-family:var(--mono);font-size:.875rem;color:var(--fg);background:#1E1E1E;border:1px solid var(--line);border-radius:.5rem;padding:.55rem .65rem;width:100%;min-width:0}
+.fld input:focus-visible,td input:focus-visible{border-color:var(--lime)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr));gap:.875rem}
+.days{display:flex;flex-wrap:wrap;gap:.5rem;border:0;margin:.875rem 0 0;padding:0;min-width:0}
+.days legend{padding:0;margin-bottom:.5rem}
+.acts{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:.5rem;margin-top:1rem}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.9375rem;font-variant-numeric:tabular-nums}
+th{text-align:left;font-family:var(--mono);font-weight:500;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:.5rem .625rem;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:.625rem;border-bottom:1px solid var(--line);vertical-align:middle}
+td input[type=number]{max-width:8rem}
+td.fim,th.fim{text-align:right}
+.pill{display:inline-block;font-family:var(--mono);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:.2rem .65rem;border:1px solid currentColor;white-space:nowrap}
+.pill.g{color:var(--red)} .pill.e{color:var(--amber)} .pill.ok{color:var(--lime)}
+.muted{color:var(--mut);padding:1rem .625rem;font-size:.875rem}
+.msg{border:1px solid var(--amber);border-radius:.75rem;background:rgba(255,176,32,.10);padding:1rem 1.25rem}
+.msg.erro{border-color:var(--red);background:rgba(255,90,79,.10)}
+.msg h2{font-size:clamp(1.25rem,2vw,1.75rem);color:var(--amber)}
+.msg.erro h2{color:var(--red)}
+.msg p{margin:.4rem 0 0}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1.25rem + env(safe-area-inset-bottom,0px));max-width:min(32rem,calc(100vw - 2rem));background:var(--lime);color:#0A0A0A;font-weight:700;border-radius:.625rem;padding:.625rem 1rem;z-index:20;text-align:center}
+.toast.erro{background:var(--red);color:#0A0A0A}
+.erro-campo{color:var(--red);font-family:var(--mono);font-size:.75rem;margin:.5rem 0 0;min-height:0}
+@media (max-width:560px){
+  .prazos thead{display:none}
+  .prazos tr{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .75rem;padding:.75rem 0;border-bottom:1px solid var(--line)}
+  .prazos td{border:0;padding:0}
+  .prazos td:first-child,.prazos td.fim{grid-column:1/-1;text-align:left}
+  .prazos td input[type=number]{max-width:none}
+  .prazos td[data-l]::before{content:attr(data-l);display:block;font-family:var(--mono);font-size:.6875rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-bottom:.25rem}
+  .acts{justify-content:stretch}
+  .acts .tick{flex:1}
+}
+</style>
+</head>
+<body>
+<div class="rc">
+  <header class="top">
+    <div>
+      <div class="brand">Grupo Silva · CS</div>
+      <h1>Configurações</h1>
+    </div>
+    <a class="link" href="/">← Voltar ao radar</a>
+  </header>
+
+  <div class="msg" id="aviso" role="alert" hidden>
+    <h2 id="aviso-t"></h2>
+    <p id="aviso-p"></p>
+    <p><a class="link" id="aviso-a" href="" hidden>Recarregar e entrar de novo</a></p>
+  </div>
+
+  <p class="note" id="carregando">Carregando configurações…</p>
+
+  <div id="conteudo" hidden>
+    <section class="card" id="c-exp" aria-labelledby="h-exp" style="margin-bottom:clamp(1rem,2vw,1.75rem)">
+      <h2 id="h-exp">Expediente</h2>
+      <p class="note">O relógio dos alertas só corre dentro deste horário, em dias úteis e fora de feriados.</p>
+      <form id="f-exp" novalidate>
+        <div class="grid">
+          <div class="fld"><label class="lbl" for="e-ini">Início</label><input type="time" id="e-ini" required></div>
+          <div class="fld"><label class="lbl" for="e-fim">Fim</label><input type="time" id="e-fim" required></div>
+          <div class="fld"><label class="lbl" for="e-fuso">Fuso (IANA)</label><input type="text" id="e-fuso" value="America/Sao_Paulo" autocomplete="off" spellcheck="false" maxlength="64"></div>
+        </div>
+        <fieldset class="days" id="e-dias"><legend class="lbl">Dias úteis</legend></fieldset>
+        <p class="erro-campo" id="e-erro" role="alert"></p>
+        <div class="acts"><button class="tick" id="e-salvar" type="submit">Salvar expediente</button></div>
+      </form>
+    </section>
+
+    <section class="card" id="c-prz" aria-labelledby="h-prz" style="margin-bottom:clamp(1rem,2vw,1.75rem)">
+      <h2 id="h-prz">Prazos de sem resposta por urgência</h2>
+      <p class="note">Hoje o painel usa o nível Médio; Alto e Baixo passam a valer quando o classificador de urgência entrar.</p>
+      <div class="tw"><table class="prazos">
+        <thead><tr><th>Urgência</th><th>Aviso (min)</th><th>Gestor (min)</th><th class="fim"></th></tr></thead>
+        <tbody id="t-prz"></tbody>
+      </table></div>
+      <p class="erro-campo" id="p-erro" role="alert"></p>
+    </section>
+
+    <section class="card" id="c-fer" aria-labelledby="h-fer">
+      <h2 id="h-fer">Feriados</h2>
+      <p class="note">O relógio para nos feriados, como no fim de semana.</p>
+      <form id="f-fer" novalidate>
+        <div class="grid">
+          <div class="fld"><label class="lbl" for="f-data">Data</label><input type="date" id="f-data" required></div>
+          <div class="fld"><label class="lbl" for="f-desc">Descrição</label><input type="text" id="f-desc" maxlength="120" autocomplete="off" required></div>
+        </div>
+        <p class="erro-campo" id="f-erro" role="alert"></p>
+        <div class="acts"><button class="tick" id="f-add" type="submit">Adicionar feriado</button></div>
+      </form>
+      <div class="tw" style="margin-top:1rem"><table>
+        <thead><tr><th>Data</th><th>Descrição</th><th class="fim"></th></tr></thead>
+        <tbody id="t-fer"></tbody>
+      </table></div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const DIAS = [[1, 'Seg'], [2, 'Ter'], [3, 'Qua'], [4, 'Qui'], [5, 'Sex'], [6, 'Sáb'], [7, 'Dom']];
+  const URG = [['alto', 'Alto'], ['medio', 'Médio'], ['baixo', 'Baixo']];
+  const GENERICO = 'Não foi possível salvar. Tente de novo.';
+  let toastT = 0;
+
+  function el(tag, cls, txt) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (txt != null) e.textContent = txt;
+    return e;
+  }
+
+  function toast(txt, erro) {
+    const t = $('toast');
+    t.textContent = txt;
+    t.className = 'toast' + (erro ? ' erro' : '');
+    t.hidden = false;
+    clearTimeout(toastT);
+    toastT = setTimeout(() => { t.hidden = true; }, erro ? 6000 : 2500);
+  }
+
+  function aviso(titulo, texto, erro, recarregar) {
+    $('aviso').className = 'msg' + (erro ? ' erro' : '');
+    $('aviso-t').textContent = titulo;
+    $('aviso-p').textContent = texto;
+    $('aviso-a').hidden = !recarregar;
+    if (recarregar) $('aviso-a').href = location.href;
+    $('aviso').hidden = false;
+    $('carregando').hidden = true;
+  }
+
+  function erroHttp(e) { return e && typeof e.status === 'number' ? e : { status: 0, mensagem: '' }; }
+
+  async function api(method, path, body) {
+    let r;
+    try {
+      r = await fetch('/api/admin' + path, {
+        method,
+        credentials: 'include',
+        headers: body === undefined ? { Accept: 'application/json' } : { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (_) {
+      throw { status: 0, mensagem: '' };
+    }
+    if (r.ok) return r.status === 204 ? null : r.json();
+    let msg = '';
+    try { const j = await r.json(); if (j && typeof j.erro === 'string') msg = j.erro; } catch (_) { /* sem corpo */ }
+    throw { status: r.status, mensagem: msg };
+  }
+
+  // Trata o erro de uma gravação: devolve a mensagem para mostrar junto ao formulário (sem perder o digitado).
+  function tratar(e, alvo) {
+    const x = erroHttp(e);
+    let msg;
+    if (x.status === 401) { aviso('Sessão inválida', 'Entre com a conta de administrador.', true, true); msg = 'Entre com a conta de administrador.'; }
+    else if (x.status === 403) { aviso('Sem permissão', x.mensagem || 'Esta conta não tem permissão de administrador.', false, true); msg = x.mensagem || 'Esta conta não tem permissão de administrador.'; }
+    else if (x.status === 400 && x.mensagem) msg = x.mensagem;
+    else msg = GENERICO;
+    if (alvo) alvo.textContent = msg;
+    toast(msg, true);
+  }
+
+  const hhmm = (v) => (typeof v === 'string' ? v.slice(0, 5) : '');
+
+  // ---------- expediente ----------
+  function montarDias() {
+    const f = $('e-dias');
+    for (const [n, rot] of DIAS) {
+      const l = el('label', 'chip');
+      const i = el('input'); i.type = 'checkbox'; i.value = String(n); i.name = 'dia';
+      l.appendChild(i); l.appendChild(el('span', null, rot));
+      f.appendChild(l);
+    }
+  }
+
+  function mostrarExpediente(x) {
+    $('e-ini').value = hhmm(x.hora_inicio);
+    $('e-fim').value = hhmm(x.hora_fim);
+    $('e-fuso').value = x.fuso || 'America/Sao_Paulo';
+    const set = new Set((x.dias_uteis || []).map(Number));
+    for (const i of $('e-dias').querySelectorAll('input')) i.checked = set.has(Number(i.value));
+  }
+
+  async function salvarExpediente(ev) {
+    ev.preventDefault();
+    const erro = $('e-erro'); erro.textContent = '';
+    const ini = $('e-ini').value, fim = $('e-fim').value, fuso = $('e-fuso').value.trim();
+    const dias = [...$('e-dias').querySelectorAll('input:checked')].map((i) => Number(i.value));
+    if (!ini || !fim) { erro.textContent = 'Informe o início e o fim do expediente.'; return; }
+    if (fim <= ini) { erro.textContent = 'O fim do expediente precisa ser depois do início.'; return; }
+    if (dias.length === 0) { erro.textContent = 'Marque ao menos um dia útil.'; return; }
+    if (!fuso) { erro.textContent = 'Informe o fuso (ex.: America/Sao_Paulo).'; return; }
+    const b = $('e-salvar'); b.disabled = true;
+    try {
+      mostrarExpediente(await api('PUT', '/expediente', { hora_inicio: ini, hora_fim: fim, dias_uteis: dias, fuso }));
+      toast('Salvo.');
+    } catch (e) { tratar(e, erro); }
+    finally { b.disabled = false; }
+  }
+
+  // ---------- prazos ----------
+  function linhaPrazo(urg, rot, p) {
+    const tr = el('tr');
+    tr.dataset.urgencia = urg;
+    const c0 = el('td'); const pill = el('span', 'pill ' + (urg === 'alto' ? 'g' : urg === 'medio' ? 'e' : 'ok'), rot); c0.appendChild(pill);
+    const mk = (id, v, rotulo) => {
+      const td = el('td'); const i = el('input');
+      i.type = 'number'; i.min = '1'; i.step = '1'; i.inputMode = 'numeric'; i.id = id; i.value = v == null ? '' : String(v);
+      i.setAttribute('aria-label', rotulo + ' — ' + rot + ' (minutos)');
+      td.dataset.l = rotulo + ' (min)'; td.appendChild(i); return [td, i];
+    };
+    const [c1, iAviso] = mk('pa-' + urg, p && p.minutos_aviso, 'Aviso');
+    const [c2, iGestor] = mk('pg-' + urg, p && p.minutos_gestor, 'Gestor');
+    const c3 = el('td', 'fim'); const b = el('button', 'tick', 'Salvar'); b.type = 'button'; c3.appendChild(b);
+    tr.append(c0, c1, c2, c3);
+    b.addEventListener('click', async () => {
+      const erro = $('p-erro'); erro.textContent = '';
+      const a = Number(iAviso.value), g = Number(iGestor.value);
+      if (!Number.isInteger(a) || a < 1 || !Number.isInteger(g) || g < 1) { erro.textContent = rot + ': informe minutos inteiros a partir de 1.'; return; }
+      if (g <= a) { erro.textContent = rot + ': o prazo do gestor precisa ser maior que o do aviso.'; return; }
+      b.disabled = true;
+      try {
+        const r = await api('PUT', '/prazos/' + encodeURIComponent(urg), { minutos_aviso: a, minutos_gestor: g });
+        iAviso.value = String(r.minutos_aviso); iGestor.value = String(r.minutos_gestor);
+        toast('Salvo.');
+      } catch (e) { tratar(e, erro); }
+      finally { b.disabled = false; }
+    });
+    return tr;
+  }
+
+  function mostrarPrazos(lista) {
+    const tb = $('t-prz'); tb.replaceChildren();
+    const por = new Map((lista || []).map((p) => [p.urgencia, p]));
+    for (const [urg, rot] of URG) tb.appendChild(linhaPrazo(urg, rot, por.get(urg)));
+  }
+
+  // ---------- feriados ----------
+  const dataBr = (d) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d); return m ? m[3] + '/' + m[2] + '/' + m[1] : d; };
+  const dataValida = (d) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+    if (!m) return false;
+    const x = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    return x.getUTCFullYear() === +m[1] && x.getUTCMonth() === +m[2] - 1 && x.getUTCDate() === +m[3];
+  };
+
+  function mostrarFeriados(lista) {
+    const tb = $('t-fer'); tb.replaceChildren();
+    const ord = [...(lista || [])].sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
+    if (!ord.length) {
+      const tr = el('tr'); const td = el('td', 'muted', 'Nenhum feriado cadastrado.'); td.colSpan = 3; tr.appendChild(td); tb.appendChild(tr); return;
+    }
+    for (const f of ord) {
+      const tr = el('tr');
+      tr.appendChild(el('td', null, dataBr(f.data)));
+      tr.appendChild(el('td', null, f.descricao));
+      const c = el('td', 'fim'); const b = el('button', 'tick danger', 'Remover'); b.type = 'button';
+      b.setAttribute('aria-label', 'Remover o feriado de ' + dataBr(f.data));
+      b.addEventListener('click', async () => {
+        if (!confirm('Remover o feriado de ' + dataBr(f.data) + ' (' + f.descricao + ')?')) return;
+        b.disabled = true;
+        try {
+          await api('DELETE', '/feriados/' + encodeURIComponent(f.data));
+          feriados = feriados.filter((x) => x.data !== f.data);
+          mostrarFeriados(feriados);
+          toast('Salvo.');
+        } catch (e) { b.disabled = false; tratar(e, $('f-erro')); }
+      });
+      c.appendChild(b); tr.appendChild(c); tb.appendChild(tr);
+    }
+  }
+
+  let feriados = [];
+
+  async function adicionarFeriado(ev) {
+    ev.preventDefault();
+    const erro = $('f-erro'); erro.textContent = '';
+    const data = $('f-data').value, desc = $('f-desc').value.trim();
+    if (!dataValida(data)) { erro.textContent = 'Informe uma data válida.'; return; }
+    if (!desc) { erro.textContent = 'Informe a descrição do feriado.'; return; }
+    if (desc.length > 120) { erro.textContent = 'A descrição pode ter no máximo 120 caracteres.'; return; }
+    const b = $('f-add'); b.disabled = true;
+    try {
+      const r = await api('PUT', '/feriados/' + encodeURIComponent(data), { descricao: desc });
+      feriados = feriados.filter((x) => x.data !== r.data).concat([{ data: r.data, descricao: r.descricao }]);
+      mostrarFeriados(feriados);
+      $('f-data').value = ''; $('f-desc').value = '';
+      toast('Salvo.');
+    } catch (e) { tratar(e, erro); }
+    finally { b.disabled = false; }
+  }
+
+  // ---------- carga ----------
+  async function carregar() {
+    try {
+      const c = await api('GET', '/config');
+      mostrarExpediente(c.expediente || {});
+      mostrarPrazos(c.prazos);
+      feriados = (c.feriados || []).map((f) => ({ data: f.data, descricao: f.descricao }));
+      mostrarFeriados(feriados);
+      $('carregando').hidden = true;
+      $('conteudo').hidden = false;
+    } catch (e) {
+      const x = erroHttp(e);
+      if (x.status === 401) aviso('Sessão inválida', 'Entre com a conta de administrador.', true, true);
+      else if (x.status === 403) aviso('Sem permissão', x.mensagem || 'Esta conta não tem permissão de administrador.', false, true);
+      else aviso('Não foi possível carregar', 'Sem conexão com o servidor do Radar. Recarregue a página em instantes.', true, true);
+    }
+  }
+
+  montarDias();
+  $('f-exp').addEventListener('submit', salvarExpediente);
+  $('f-fer').addEventListener('submit', adicionarFeriado);
+  carregar();
+})();
+</script>
+</body>
+</html>

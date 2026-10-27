@@ -32,6 +32,7 @@ h1{font-family:var(--display);font-weight:400;text-transform:uppercase;line-heig
 button{font:inherit;cursor:pointer}
 .tvbtn{font-family:var(--mono);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);background:transparent;border:1px solid var(--line);border-radius:.5rem;padding:.45rem .7rem}
 .tvbtn:hover{color:var(--lime);border-color:var(--lime)}
+a.tvbtn{display:inline-block;text-decoration:none}
 .tvbtn:focus-visible,.tick:focus-visible,.chip:focus-visible,.link:focus-visible,.ctl:focus-visible,.who select:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
 
 .demo{border:1px dashed var(--line);border-radius:.5rem;padding:.75rem .875rem;display:flex;flex-direction:column;gap:.625rem;background:rgba(244,244,238,.02)}
@@ -130,7 +131,7 @@ html.tv #definicoes{display:none}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1.25rem + env(safe-area-inset-bottom,0px));max-width:min(32rem,calc(100vw - 2rem));background:var(--lime);color:#0A0A0A;font-weight:700;border-radius:.625rem;padding:.625rem 1rem;z-index:20;text-align:center}
 @media (prefers-reduced-motion:no-preference){.flash{animation:fl 1.2s ease-out}@keyframes fl{from{background:rgba(200,224,0,.2)}to{background:transparent}}}
 
-html.tv .admin,html.tv .demo{display:none}
+html.tv .admin,html.tv .demo,html.tv #cfglink{display:none}
 html.tv .tvbtn{opacity:.5}
 
 @media (max-width:760px){
@@ -153,6 +154,7 @@ html.tv .tvbtn{opacity:.5}
       <span class="clock" id="clock">--:--</span>
       <span class="obs" id="obs"><span class="dot"></span><span id="obs-txt">Verificando observador…</span></span>
       <button class="tvbtn" id="tvbtn" type="button" aria-pressed="false">Modo TV</button>
+      <a class="tvbtn" id="cfglink" href="/admin" hidden>Configurações</a>
     </div>
   </header>
 
@@ -506,6 +508,8 @@ html.tv .tvbtn{opacity:.5}
   function applyRadar(r, announce) {
     const prev = S.seen;
     S.radar = r; S.recebidoEm = Date.now(); S.erro = false;
+    // Link da tela de configurações: só para a conta de administrador (a API também confere).
+    $('cfglink').hidden = !(r.usuario && r.usuario.admin === true);
     S.seen = new Map(r.alertas.map((a) => [a.id_grupo, a.nivel]));
     const novos = [];
     if (prev) for (const a of r.alertas) {
