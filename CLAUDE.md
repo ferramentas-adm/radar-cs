@@ -316,7 +316,7 @@ Os casos de limite (19/20/31 min, 23h59/24h/48h etc.) valem **dentro do expedien
 
 ## Regras de trabalho
 
-- **Nunca ler nem editar o `.env`.**
+- **Nunca ler o `.env`** (local nem da VPS) e **nunca editar o `.env` local**. **Liberado pelo responsável: acessar a VPS** (`root@72.60.243.180`, pasta `/root/radar-cs`) para fazer deploy (reenviar o código e refazer o container) e **acrescentar ou trocar variáveis no `.env` da VPS** quando o responsável pedir, sem mostrar valores nem segredos existentes. A senha da VPS vem do responsável na conversa; nunca gravar em arquivo do projeto.
 - **Commit e push liberados** (decisão do responsável): ao terminar uma tarefa, com `npm test` e `npm run typecheck` passando, pode commitar e dar push em `main`. Nunca `--force`, nunca `--no-verify`, nunca commitar `.env` nem `var/`.
 - **Nunca rodar** `db:push`, `webhook:configurar`, `grupos:varrer`, `mensagens:historico`, `conversas:*`, `time:importar` nem `radar:comparar`: quem roda é o responsável pelo projeto.
 - Todo comando que grava é **simulação por padrão**; `--gravar` só é usado pelo responsável.
