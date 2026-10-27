@@ -1,15 +1,26 @@
 // Motor de regras do Radar (função pura, sem I/O). Devolve a resposta de GET /api/radar no formato
 // de docs/api-contract.md. Mesma lógica do motor de demonstração do painel, com tempo de expediente.
 // Nesta fatia: "sem resposta" (cada mensagem no prazo do seu nível de urgência; sem classificação
-// vale médio) e "sem contato". Promessas e
-// "Registrar ação feita" ficam vazios e saem como recursos ausentes (recursos.* = false), para o
-// painel esconder o que ainda não existe em vez de mostrar zero.
+// vale médio) e "sem contato". "Registrar ação feita" (marcações) vale quando o banco tem a tabela
+// (recursos.marcacoes); promessas ficam vazias e saem como recurso ausente (recursos.promessas =
+// false), para o painel esconder o que ainda não existe em vez de mostrar zero.
 // Conversa privada nunca vira linha (alertas, pendentes, clientes, resumo): entra só nos números
 // por especialista (privadas sem resposta além do prazo de aviso; com atividade em 7 dias e no mês).
 // "Aguardando definição do especialista principal": pela regra do responsável (planejarResponsaveis),
 // só grupos, no máximo 20 itens com o total; só nome do grupo e nomes de especialista.
 import { planejarResponsaveis, type EntradaResponsaveis } from '../conversas/responsavel.js';
 import { inicioDoMes, somarDiasUteis, somarExpediente, type Calendario } from './expediente.js';
+
+export type ComoMarcacao = 'ligacao' | 'privado' | 'reuniao';
+export interface MarcacaoMotor {
+  como: ComoMarcacao;
+  marcado_por: string;
+  marcado_em: number; // ms
+  /** Fim da janela de 3 h em tempo de expediente (calculado quando a ação foi registrada). */
+  volta_em: number; // ms
+  /** Marcação já desfeita não vale. */
+  desfeita?: boolean;
+}
 
 export type Urgencia = 'alto' | 'medio' | 'baixo';
 export interface Prazo {
@@ -33,6 +44,8 @@ export interface GrupoMotor {
   tipo?: 'grupo' | 'privada';
   /** Só na privada: ms da última mensagem de qualquer lado (conte ou não), para a atividade. */
   ultima_atividade_em?: number | null;
+  /** Marcação mais recente do grupo ("Registrar ação feita"). */
+  marcacao?: MarcacaoMotor | null;
 }
 
 /** Só mensagens que contam (conta = true). */
@@ -57,6 +70,8 @@ export interface EntradaMotor {
   observador: { status: 'conectado' | 'conectando' | 'desconectado'; desde: number | null };
   ultimaMensagemEm: number | null;
   usuario: { nome: string; pode_marcar: boolean; admin?: boolean };
+  /** O banco tem a tabela de marcações (migration aplicada). Sem isto o painel esconde o recurso. */
+  recursos?: { marcacoes?: boolean };
   /** Presença, time e varreduras (sem agora). Ausente = lista "aguardando definição" vazia. */
   responsaveis?: Omit<EntradaResponsaveis, 'agora'>;
 }
@@ -85,7 +100,7 @@ interface Alerta {
   gestor: string;
   nivel: Nivel;
   motivos: Motivo[];
-  voltou_de_marcacao: null;
+  voltou_de_marcacao: { como: ComoMarcacao; marcado_por: string; marcado_em: string } | null;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -108,6 +123,15 @@ export function calcular(e: EntradaMotor) {
   }
 
   const alertas: Alerta[] = [];
+  const resolvidos: {
+    id_grupo: string;
+    cliente: string;
+    especialista: string;
+    marcado_por: string;
+    como: ComoMarcacao;
+    marcado_em: string;
+    volta_em: string;
+  }[] = [];
   const pendentes: {
     id_grupo: string;
     cliente: string;
@@ -174,17 +198,39 @@ export function calcular(e: EntradaMotor) {
 
     let estado: Estado = 'ok';
     if (motivos.length > 0) {
-      const nivel: Nivel = motivos.some((m) => m.nivel === 'gestor') ? 'gestor' : 'aviso';
-      alertas.push({
-        id_grupo: g.id_grupo,
-        cliente: g.cliente,
-        especialista: g.especialista,
-        gestor: g.gestor,
-        nivel,
-        motivos,
-        voltou_de_marcacao: null,
-      });
-      estado = nivel;
+      let nivel: Nivel = motivos.some((m) => m.nivel === 'gestor') ? 'gestor' : 'aviso';
+      // Ação feita por fora: vale se não foi desfeita e o time ainda não escreveu no grupo depois dela.
+      // Dentro da janela o alerta sai de "Precisam de ação"; passada a janela, volta em nível gestor.
+      const m = g.marcacao;
+      const ativa = !!m && !m.desfeita && (ultimaTime === null || ultimaTime <= m.marcado_em);
+      if (m && ativa && ag < m.volta_em) {
+        resolvidos.push({
+          id_grupo: g.id_grupo,
+          cliente: g.cliente,
+          especialista: g.especialista,
+          marcado_por: m.marcado_por,
+          como: m.como,
+          marcado_em: iso(m.marcado_em),
+          volta_em: iso(m.volta_em),
+        });
+        estado = 'resolvido_por_fora';
+      } else {
+        let voltou: Alerta['voltou_de_marcacao'] = null;
+        if (m && ativa) {
+          voltou = { como: m.como, marcado_por: m.marcado_por, marcado_em: iso(m.marcado_em) };
+          nivel = 'gestor';
+        }
+        alertas.push({
+          id_grupo: g.id_grupo,
+          cliente: g.cliente,
+          especialista: g.especialista,
+          gestor: g.gestor,
+          nivel,
+          motivos,
+          voltou_de_marcacao: voltou,
+        });
+        estado = nivel;
+      }
     }
     estados.set(g.id_grupo, estado);
     if (fila.length > 0) {
@@ -215,7 +261,7 @@ export function calcular(e: EntradaMotor) {
       maxMin = Math.max(maxMin, (ag - d) / MIN);
       maxFr = Math.max(maxFr, (ag - d) / Math.max(1, k - d));
     }
-    return a.nivel === 'gestor' ? 1e6 + maxMin : maxFr * 1000;
+    return a.nivel === 'gestor' ? 1e6 + maxMin + (a.voltou_de_marcacao ? 1e5 : 0) : maxFr * 1000;
   };
   alertas.sort((x, y) => chave(y) - chave(x) || x.cliente.localeCompare(y.cliente, 'pt-BR'));
 
@@ -307,7 +353,7 @@ export function calcular(e: EntradaMotor) {
   return {
     gerado_em: iso(ag),
     // Ainda não implementados: o painel esconde as seções em vez de mostrar zero.
-    recursos: { marcacoes: false, promessas: false },
+    recursos: { marcacoes: e.recursos?.marcacoes === true, promessas: false },
     usuario: e.usuario,
     observador: {
       status: e.observador.status,
@@ -324,7 +370,7 @@ export function calcular(e: EntradaMotor) {
     },
     alertas,
     pendentes,
-    resolvidos_por_fora: [],
+    resolvidos_por_fora: resolvidos,
     por_especialista,
     retornos: [],
     definicoes_pendentes,

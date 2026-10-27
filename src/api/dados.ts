@@ -6,12 +6,12 @@
 // O mapeamento (montarDadosRadar) é puro e é o mesmo do carregamento antigo (dados-legado.ts).
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Expediente } from '../motor/expediente.js';
-import type { EntradaMotor, GrupoMotor, MensagemMotor, Prazo, Urgencia } from '../motor/calcular.js';
+import type { ComoMarcacao, EntradaMotor, GrupoMotor, MensagemMotor, Prazo, Urgencia } from '../motor/calcular.js';
 import type { MembroResponsavel } from '../conversas/responsavel.js';
 
 export type DadosRadar = Pick<
   EntradaMotor,
-  'grupos' | 'mensagens' | 'calendario' | 'prazo' | 'prazos' | 'ultimaMensagemEm' | 'responsaveis'
+  'grupos' | 'mensagens' | 'calendario' | 'prazo' | 'prazos' | 'ultimaMensagemEm' | 'responsaveis' | 'recursos'
 >;
 
 interface MensagemJson {
@@ -34,7 +34,16 @@ export interface RadarDadosJson {
     ultima_time: MensagemJson | null;
     pendentes: MensagemJson[];
     ultima_atividade_em: string | null;
+    /** Marcação mais recente do grupo (ausente em banco sem a migration das marcações). */
+    marcacao?: {
+      como: ComoMarcacao;
+      marcado_por: string;
+      marcado_em: string;
+      volta_em: string;
+      encerrada_por: 'mensagem_no_grupo' | 'desfeita' | 'expirou' | null;
+    } | null;
   }[];
+  recursos?: { marcacoes?: boolean };
   expediente: Expediente;
   feriados: string[];
   prazo: Prazo;
@@ -62,6 +71,17 @@ export function montarDadosRadar(j: RadarDadosJson): DadosRadar {
       observador_entrou_em: c.observador_entrou_em ? Date.parse(c.observador_entrou_em) : null,
       ...(c.tipo === 'privada'
         ? { ultima_atividade_em: c.ultima_atividade_em ? Date.parse(c.ultima_atividade_em) : null }
+        : {}),
+      ...(c.marcacao
+        ? {
+            marcacao: {
+              como: c.marcacao.como,
+              marcado_por: c.marcacao.marcado_por,
+              marcado_em: Date.parse(c.marcacao.marcado_em),
+              volta_em: Date.parse(c.marcacao.volta_em),
+              ...(c.marcacao.encerrada_por === 'desfeita' ? { desfeita: true } : {}),
+            },
+          }
         : {}),
     });
     if (c.ultima_time) {
@@ -93,6 +113,7 @@ export function montarDadosRadar(j: RadarDadosJson): DadosRadar {
         }
       : {}),
     ultimaMensagemEm: j.ultima_mensagem_em ? Date.parse(j.ultima_mensagem_em) : null,
+    ...(j.recursos?.marcacoes ? { recursos: { marcacoes: true } } : {}),
     responsaveis: {
       // Só grupos (privada nunca entra na regra do responsável), com os valores crus do banco.
       grupos: j.conversas

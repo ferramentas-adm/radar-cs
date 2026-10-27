@@ -131,7 +131,7 @@ Resposta única, já calculada. Timestamps em ISO 8601 com offset (`-03:00` ou `
 
 | Campo | Valores / regra |
 |---|---|
-| `recursos` | `{ marcacoes, promessas }`, booleanos: o que o backend já implementa. `false` (ou campo ausente) = ainda não existe, e o painel **esconde** a parte em vez de mostrar zero. `marcacoes: false` esconde a seção "Ações feitas por fora", a frase "Agiu por ligação, privado ou reunião? Depois de agir, registre a ação aqui", o botão "Registrar ação feita", o item "ação feita por fora" da legenda e a regra da ação feita por fora no rodapé. `promessas: false` esconde a seção "Retornos prometidos", o cartão "Retornos vencidos", a coluna "Retornos vencidos" da tabela por especialista e a regra do retorno vencido no rodapé. Hoje o backend manda os dois `false`; a demonstração do painel, os dois `true`. Com `false`, `resolvidos_por_fora` e `retornos` vêm `[]` e `retornos_vencidos` vem `0`. |
+| `recursos` | `{ marcacoes, promessas }`, booleanos: o que o backend já implementa. `false` (ou campo ausente) = ainda não existe, e o painel **esconde** a parte em vez de mostrar zero. `marcacoes: false` esconde a seção "Ações feitas por fora", a frase "Agiu por ligação, privado ou reunião? Depois de agir, registre a ação aqui", o botão "Registrar ação feita", o item "ação feita por fora" da legenda e a regra da ação feita por fora no rodapé. `promessas: false` esconde a seção "Retornos prometidos", o cartão "Retornos vencidos", a coluna "Retornos vencidos" da tabela por especialista e a regra do retorno vencido no rodapé. Hoje o backend manda `marcacoes: true` quando o banco tem a tabela das marcações (migration `20261029120000_marcacoes.sql`) e `promessas: false`; a demonstração do painel, os dois `true`. Com `false`, `resolvidos_por_fora` e `retornos` vêm `[]` e `retornos_vencidos` vem `0`. |
 | `usuario.pode_marcar` | `true` mostra o botão "Registrar ação feita". Só especialistas e gestores. |
 | `usuario.admin` | `true` só quando a autenticação foi com a conta de administrador: o painel mostra o link "Configurações" (`/admin`). Campo ausente ou `false` esconde o link. Só conveniência de tela: a API de administração confere o papel em toda chamada. |
 | `observador.status` | `conectado`, `conectando` ou `desconectado` (vem de `GET /instance/status` da uazapi). Qualquer valor diferente de `conectado` faz o painel mostrar a faixa vermelha de aviso e **nunca** "Tudo em dia". |
@@ -187,9 +187,11 @@ Corpo: `{ "id_grupo": "…@g.us", "como": "ligacao" }`.
 
 Depois do `201` o painel chama `GET /api/radar` de novo.
 
+`volta_em` (fim da janela de 3 h, só em tempo de expediente) é calculado no servidor na hora do registro. As duas contas do painel são compartilhadas: `marcado_por` é o usuário do login (por isso aparece o nome da conta, não o da pessoa) e qualquer conta autenticada pode registrar e desfazer.
+
 ## DELETE /api/marcacoes/{id_grupo}
 
-Desfaz a marcação válida do grupo. `204` em sucesso. Só quem marcou, ou um gestor. A marcação continua no histórico com `encerrada_por = desfeita`.
+Desfaz a marcação aberta do grupo. `204` em sucesso, `404` se não havia nenhuma. Hoje qualquer conta autenticada pode desfazer (não há identidade individual). A marcação continua no histórico com `encerrada_por = desfeita`.
 
 ## Erros
 

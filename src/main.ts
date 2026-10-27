@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { servicoAdminSupabase } from './api/admin.js';
 import { CacheRadar } from './api/cache.js';
 import { carregarDadosRadar } from './api/dados.js';
+import { encerrarMarcacoes, servicoMarcacoesSupabase } from './marcacoes/servico.js';
 import { criarClassificador } from './classificador/classificador.js';
 import { CacheCadastro, carregadorSupabase } from './cadastro.js';
 import { ErroConfig, lerConfig } from './config.js';
@@ -29,6 +30,7 @@ const ARQUIVO_PROMPT_CLASSIFICADOR = 'prompts/classificador.md';
 const RECARGA_CADASTRO_MS = 60_000;
 const CONSULTA_STATUS_MS = 2 * 60_000;
 const RECONCILIA_MS = 5 * 60_000;
+const ENCERRA_MARCACOES_MS = 60_000;
 
 async function main(): Promise<void> {
   carregarEnv();
@@ -89,8 +91,13 @@ async function main(): Promise<void> {
               ...(await cacheRadar.obter()),
               agora: Date.now(),
               observador: estado.resumo(),
-              usuario: { nome: usuario, pode_marcar: false, admin }, // "Registrar ação feita" fora desta fatia
+              usuario: { nome: usuario, pode_marcar: true, admin },
             }),
+          marcacoes: servicoMarcacoesSupabase(
+            db!,
+            async () => (await cacheRadar.obter()).calendario,
+            () => cacheRadar.invalidar(),
+          ),
           // Tela de configurações: só com a conta de administrador no .env. Gravou, o cache do radar
           // é descartado para o expediente, os feriados e os prazos novos valerem já no próximo pedido.
           ...(db && painelCfg.admin
@@ -195,6 +202,19 @@ async function main(): Promise<void> {
   const timerReconciliar = setInterval(() => void reconciliar(), RECONCILIA_MS);
   timerReconciliar.unref();
 
+  // Marcações ("Registrar ação feita") que já acabaram: só histórico, o motor decide sozinho. Falha de
+  // banco (ou migration ainda não aplicada) vira aviso, nunca derruba o serviço.
+  const fecharMarcacoes = async () => {
+    if (!db) return;
+    try {
+      await encerrarMarcacoes(db);
+    } catch (e) {
+      app?.log.warn({ erro: (e as Error).message }, 'falha ao encerrar marcações');
+    }
+  };
+  const timerMarcacoes = setInterval(() => void fecharMarcacoes(), ENCERRA_MARCACOES_MS);
+  timerMarcacoes.unref();
+
   let encerrando = false;
   const encerrar = async (sinal: string) => {
     if (encerrando) return;
@@ -203,6 +223,7 @@ async function main(): Promise<void> {
     cadastro.parar();
     clearInterval(timerStatus);
     clearInterval(timerReconciliar);
+    clearInterval(timerMarcacoes);
     await app?.close();
     await fila.esvaziar();
     process.exit(0);

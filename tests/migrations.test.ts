@@ -48,10 +48,17 @@ describe('migrations', () => {
   describe('funções rpc (troca de presença e de responsável)', () => {
     const funcoes = [...sql.matchAll(/create (?:or replace )?function public\.(\w+)\(([^)]*)\)([\s\S]*?)\$\$;/gi)];
     // radar_dados é redefinida por migrations novas (create or replace): vale a última definição.
-    const rpc = [...new Map(funcoes.filter((f) => ['substituir_presencas', 'trocar_responsavel', 'radar_dados'].includes(f[1]!)).map((f) => [f[1]!, f])).values()];
+    const rpc = [...new Map(funcoes.filter((f) => ['substituir_presencas', 'trocar_responsavel', 'radar_dados', 'encerrar_marcacoes', 'registrar_marcacao', 'desfazer_marcacao'].includes(f[1]!)).map((f) => [f[1]!, f])).values()];
 
-    it('existem as três', () => {
-      expect(rpc.map((f) => f[1])).toEqual(['substituir_presencas', 'trocar_responsavel', 'radar_dados']);
+    it('existem as seis', () => {
+      expect(rpc.map((f) => f[1])).toEqual([
+        'substituir_presencas',
+        'trocar_responsavel',
+        'radar_dados',
+        'encerrar_marcacoes',
+        'registrar_marcacao',
+        'desfazer_marcacao',
+      ]);
     });
 
     it('toda função tem search_path fixo', () => {

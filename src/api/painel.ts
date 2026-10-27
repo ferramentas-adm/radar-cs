@@ -5,6 +5,7 @@
 // Sem a conta de administrador configurada, essas rotas nem existem (404).
 // O webhook (/hooks/...) e /saude ficam fora: o webhook tem o segredo do caminho.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { validarMarcacao, type ServicoMarcacoes } from '../marcacoes/servico.js';
 import type { RespostaRadar } from '../motor/calcular.js';
 import { iguaisSeguro } from '../webhook/validar.js';
 import { validarExpediente, validarFeriado, validarPrazo, type ServicoAdmin } from './admin.js';
@@ -26,6 +27,8 @@ export interface DepsPainel {
   html: string;
   /** Monta a resposta da API para o usuário autenticado (admin = conta de administrador). */
   radar(usuario: string, admin: boolean): Promise<RespostaRadar>;
+  /** "Registrar ação feita" (POST e DELETE /api/marcacoes). Ausente = desligado (404). */
+  marcacoes?: ServicoMarcacoes;
   /** Tela de configurações. Ausente = desligada. */
   admin?: DepsAdmin;
 }
@@ -114,6 +117,39 @@ export function registrarPainel(app: FastifyInstance, deps: DepsPainel): void {
       return cabecalhos(reply).code(500).send({ erro: 'erro interno' });
     }
   });
+
+  // "Registrar ação feita". A conta é compartilhada: quem marcou vem do usuário da sessão (nunca do corpo)
+  // e qualquer conta autenticada pode desfazer (não há identidade individual por trás do login).
+  if (deps.marcacoes) {
+    const marcacoes = deps.marcacoes;
+    app.post('/api/marcacoes', { onRequest: exigirLogin }, async (req, reply) => {
+      const v = validarMarcacao(req.body);
+      if (!v.ok) return cabecalhos(reply).code(400).send({ erro: v.erro });
+      try {
+        const conta = autenticarConta(req.headers.authorization, contas)!;
+        const r = await marcacoes.registrar(conta.usuario, v.valor.id_grupo, v.valor.como);
+        if (r === 'grupo_inexistente') return cabecalhos(reply).code(404).send({ erro: 'Grupo inexistente ou inativo.' });
+        if (r === 'ja_existe') return cabecalhos(reply).code(409).send({ erro: 'Já existe ação registrada para este grupo.' });
+        return cabecalhos(reply).code(201).send({ ok: true });
+      } catch (e) {
+        req.log.error({ erro: (e as Error).message }, 'falha ao registrar ação feita');
+        return cabecalhos(reply).code(500).send({ erro: 'erro interno' });
+      }
+    });
+
+    app.delete<{ Params: { id_grupo: string } }>('/api/marcacoes/:id_grupo', { onRequest: exigirLogin }, async (req, reply) => {
+      const v = validarMarcacao({ id_grupo: req.params.id_grupo, como: 'ligacao' });
+      if (!v.ok) return cabecalhos(reply).code(400).send({ erro: v.erro });
+      try {
+        const n = await marcacoes.desfazer(v.valor.id_grupo);
+        if (n === 0) return cabecalhos(reply).code(404).send({ erro: 'Nenhuma ação registrada para este grupo.' });
+        return cabecalhos(reply).code(204).send();
+      } catch (e) {
+        req.log.error({ erro: (e as Error).message }, 'falha ao desfazer ação feita');
+        return cabecalhos(reply).code(500).send({ erro: 'erro interno' });
+      }
+    });
+  }
 
   if (!deps.admin) return;
   const admin = deps.admin;
