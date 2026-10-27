@@ -164,7 +164,6 @@ async function main(): Promise<void> {
         'escreveu primeiro não é cadastrado (falta a consulta de participantes)',
     );
   }
-  await consultarStatus();
   const timerStatus = setInterval(() => void consultarStatus(), CONSULTA_STATUS_MS);
   timerStatus.unref();
 
@@ -179,7 +178,6 @@ async function main(): Promise<void> {
     const novas = resumos.reduce((n, r) => n + r.novas, 0);
     app?.log.info({ instancias: resumos.length, conversas, conversas_com_falha: falhas, mensagens_recuperadas: novas }, 'reconciliação');
   };
-  await reconciliar();
   const timerReconciliar = setInterval(() => void reconciliar(), RECONCILIA_MS);
   timerReconciliar.unref();
 
@@ -205,6 +203,13 @@ async function main(): Promise<void> {
     'receptor do webhook no ar',
   );
   if (semBanco) app.log.warn('--sem-banco: sem cadastro e sem painel; todas as mensagens são descartadas');
+
+  // Status e reconciliação da subida rodam depois de abrir a porta: com muitas conversas a
+  // reconciliação demora minutos, e o painel e o webhook não podem esperar por ela.
+  void (async () => {
+    await consultarStatus();
+    await reconciliar();
+  })().catch((e: unknown) => app?.log.warn({ erro: (e as Error).message }, 'falha na verificação inicial'));
 
   const reenviados = await fila.reenviarPendentes();
   if (reenviados > 0) app.log.info({ reenviados }, 'eventos pendentes reenviados');
