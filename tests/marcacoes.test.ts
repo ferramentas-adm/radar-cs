@@ -398,7 +398,7 @@ describe('montarDadosRadar com marcações', () => {
 
   it('leva a marcação do grupo e marca a desfeita', () => {
     const d = montarDadosRadar(base);
-    expect(d.recursos).toEqual({ marcacoes: true });
+    expect(d.recursos).toEqual({ marcacoes: true, promessas: false });
     expect(d.grupos[0]!.marcacao).toEqual({
       como: 'reuniao',
       marcado_por: 'radar',

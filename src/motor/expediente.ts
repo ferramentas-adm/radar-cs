@@ -69,6 +69,24 @@ function instante(data: string, minuto: number, fuso: string): number {
   return t;
 }
 
+const dois = (n: number) => String(n).padStart(2, '0');
+
+/** "AAAA-MM-DD HH:MM" no fuso (para mostrar à IA a hora das mensagens). */
+export function formatarLocal(t: number, fuso: string): string {
+  const l = local(t, fuso);
+  return `${l.data} ${dois(Math.floor(l.minuto / 60))}:${dois(Math.floor(l.minuto % 60))}`;
+}
+
+/** Instante UTC de "AAAA-MM-DDTHH:MM" (hora local do fuso). Data ou hora impossível = undefined. */
+export function instanteLocal(texto: string, fuso: string): number | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})$/.exec(texto.trim());
+  if (!m) return undefined;
+  const [a, mes, d, h, min] = m.slice(1).map(Number) as [number, number, number, number, number];
+  const utc = new Date(Date.UTC(a, mes - 1, d));
+  if (utc.getUTCFullYear() !== a || utc.getUTCMonth() !== mes - 1 || utc.getUTCDate() !== d || h > 23 || min > 59) return undefined;
+  return instante(`${m[1]}-${m[2]}-${m[3]}`, h * 60 + min, fuso);
+}
+
 function minutosDe(hora: string): number {
   const [h, m] = hora.split(':').map(Number) as [number, number];
   return h * 60 + m;

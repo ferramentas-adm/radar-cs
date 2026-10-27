@@ -6,6 +6,8 @@ import { conversaDoEvento } from '../conversas/classificar.js';
 import type { Classificacao, Classificador } from '../classificador/classificador.js';
 import { statusDoEventoConexao } from '../instancias/estado.js';
 import { normalizarMensagem, textoDaMensagem } from '../mensagens/normalizar.js';
+import type { DetectorRetornos } from '../retornos/detector.js';
+import type { GravarPromessas } from '../retornos/repositorio.js';
 import type { EventoBruto } from '../repositorio.js';
 import { sanitizarPayload, sanitizarPayloadPrivada } from './sanitizar.js';
 import { iguaisSeguro, instanciaDoPayload } from './validar.js';
@@ -26,6 +28,8 @@ export interface DepsWebhook {
   fila: { enfileirar(evento: EventoBruto): void; acompanhar(trabalho: Promise<void>): void };
   /** Classifica a urgência das mensagens do cliente (só grupos). Sem isto, tudo vale médio. */
   classificador?: Classificador;
+  /** IA dos retornos: detecta promessas nas mensagens do time em grupo. Sem isto, desligada. */
+  retornos?: { detector: DetectorRetornos; gravar: GravarPromessas };
   /** Recebe o status dos eventos "connection" (não grava nada). */
   estado?: { registrar(nome: string, statusUazapi: string, agora: number): void };
 }
@@ -97,6 +101,25 @@ export function registrarWebhook(app: FastifyInstance, deps: DepsWebhook): void 
               : sanitizarPayload(payload, { guardarTexto: false }),
           mensagem: { ...previa, jid: r.jid, ...(classificacao ?? {}) },
         });
+
+        // Retornos prometidos: depois de enfileirar (não atrasa a gravação da mensagem). Só texto do
+        // time em grupo; toda mensagem de texto do grupo vira contexto, só em memória.
+        if (deps.retornos && conversa.tipo === 'grupo') {
+          const corpo = textoDaMensagem(payload);
+          const m = { id: previa.id_mensagem, autor: previa.autor_tipo, texto: corpo, em: Date.parse(previa.enviada_em) };
+          if (previa.autor_tipo === 'time' && previa.conta && previa.tipo !== 'audio' && corpo.trim() !== '') {
+            const lista = await deps.retornos.detector.detectar(r.jid, m);
+            if (lista.length > 0) {
+              try {
+                await deps.retornos.gravar(r.jid, m.em, lista);
+                req.log.info({ instancia: instancia.nome, promessas: lista.length }, 'retorno prometido registrado');
+              } catch (e) {
+                req.log.warn({ erro: (e as Error).message }, 'falha ao gravar promessa');
+              }
+            }
+          }
+          if (previa.conta) deps.retornos.detector.lembrar(r.jid, m);
+        }
       };
 
       setImmediate(() => {

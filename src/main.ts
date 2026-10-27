@@ -6,6 +6,8 @@ import { carregarDadosRadar } from './api/dados.js';
 import { encerrarMarcacoes, servicoMarcacoesSupabase } from './marcacoes/servico.js';
 import { varrerInstancia } from './grupos/varredura.js';
 import { limparRetencao } from './retencao.js';
+import { criarDetectorRetornos } from './retornos/detector.js';
+import { cumprirPromessas, gravarPromessasSupabase } from './retornos/repositorio.js';
 import { criarClassificador } from './classificador/classificador.js';
 import { CacheCadastro, carregadorSupabase } from './cadastro.js';
 import { ErroConfig, lerConfig } from './config.js';
@@ -29,6 +31,7 @@ const ARQUIVO_DEV = 'var/eventos-dev.jsonl';
 const ARQUIVO_PAINEL = 'frontend/index.html';
 const ARQUIVO_ADMIN = 'frontend/admin.html';
 const ARQUIVO_PROMPT_CLASSIFICADOR = 'prompts/classificador.md';
+const ARQUIVO_PROMPT_RETORNOS = 'prompts/retornos.md';
 const RECARGA_CADASTRO_MS = 60_000;
 const CONSULTA_STATUS_MS = 2 * 60_000;
 const RECONCILIA_MS = 5 * 60_000;
@@ -146,6 +149,21 @@ async function main(): Promise<void> {
       })
     : undefined;
 
+  // IA dos retornos: só com RETORNOS_ATIVO=true, a chave da Anthropic e banco. O texto das mensagens
+  // do time e do cliente (só de grupo) vai à API e não é guardado; no banco fica só o resumo e o prazo.
+  const retornos =
+    config.retornos && db
+      ? {
+          detector: criarDetectorRetornos({
+            chave: config.retornos.chave,
+            modelo: config.retornos.modelo,
+            prompt: await readFile(ARQUIVO_PROMPT_RETORNOS, 'utf8'),
+            log: { warn: (obj, msg) => app?.log.warn(obj, msg) },
+          }),
+          gravar: gravarPromessasSupabase(db),
+        }
+      : undefined;
+
   const montado = buildApp({
     segredo: config.webhookSegredo,
     instancias: config.instancias,
@@ -154,6 +172,7 @@ async function main(): Promise<void> {
     arquivoPendentes: ARQUIVO_PENDENTES,
     estado: estadoComGanchos,
     ...(classificador ? { classificador } : {}),
+    ...(retornos ? { retornos } : {}),
     ...(painel ? { painel } : {}),
     ...(conversas ? { conversas } : {}),
   });
@@ -216,6 +235,11 @@ async function main(): Promise<void> {
       await encerrarMarcacoes(db);
     } catch (e) {
       app?.log.warn({ erro: (e as Error).message }, 'falha ao encerrar marcações');
+    }
+    try {
+      await cumprirPromessas(db);
+    } catch (e) {
+      app?.log.warn({ erro: (e as Error).message }, 'falha ao marcar promessas cumpridas');
     }
   };
   const timerMarcacoes = setInterval(() => void fecharMarcacoes(), ENCERRA_MARCACOES_MS);
@@ -308,6 +332,7 @@ async function main(): Promise<void> {
   app.log.info({ classificador: classificador ? config.classificador?.modelo : 'desligado' }, 'classificador de urgência');
   app.log.info({ varredura_automatica: config.varreduraAutomatica && !!db && !!baseUrl }, 'varredura automática');
   app.log.info({ retencao: config.retencaoAtiva && !!db }, 'limpeza de retenção (LGPD)');
+  app.log.info({ retornos: retornos ? config.retornos?.modelo : 'desligado' }, 'IA dos retornos');
   app.log.info(
     { destino: semBanco ? ARQUIVO_DEV : 'supabase', instancias: config.instancias.map((i) => i.nome) },
     'receptor do webhook no ar',

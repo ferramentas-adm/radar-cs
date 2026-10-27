@@ -11,7 +11,7 @@ import type { MembroResponsavel } from '../conversas/responsavel.js';
 
 export type DadosRadar = Pick<
   EntradaMotor,
-  'grupos' | 'mensagens' | 'calendario' | 'prazo' | 'prazos' | 'ultimaMensagemEm' | 'responsaveis' | 'recursos'
+  'grupos' | 'mensagens' | 'calendario' | 'prazo' | 'prazos' | 'ultimaMensagemEm' | 'responsaveis' | 'recursos' | 'promessas'
 >;
 
 interface MensagemJson {
@@ -43,7 +43,16 @@ export interface RadarDadosJson {
       encerrada_por: 'mensagem_no_grupo' | 'desfeita' | 'expirou' | null;
     } | null;
   }[];
-  recursos?: { marcacoes?: boolean };
+  recursos?: { marcacoes?: boolean; promessas?: boolean };
+  /** Abertas e cumpridas nas últimas 24 h (ausente em banco sem a migration das promessas). */
+  promessas?: {
+    id: number | string;
+    jid: string;
+    promessa: string;
+    prazo: string;
+    feita_em: string;
+    status: 'aberta' | 'cumprida';
+  }[];
   expediente: Expediente;
   feriados: string[];
   prazo: Prazo;
@@ -113,7 +122,21 @@ export function montarDadosRadar(j: RadarDadosJson): DadosRadar {
         }
       : {}),
     ultimaMensagemEm: j.ultima_mensagem_em ? Date.parse(j.ultima_mensagem_em) : null,
-    ...(j.recursos?.marcacoes ? { recursos: { marcacoes: true } } : {}),
+    ...(j.recursos?.marcacoes || j.recursos?.promessas
+      ? { recursos: { marcacoes: j.recursos.marcacoes === true, promessas: j.recursos.promessas === true } }
+      : {}),
+    ...(j.promessas
+      ? {
+          promessas: j.promessas.map((p) => ({
+            id: String(p.id),
+            id_grupo: p.jid,
+            promessa: p.promessa,
+            prazo: Date.parse(p.prazo),
+            feita_em: Date.parse(p.feita_em),
+            ...(p.status === 'cumprida' ? { cumprida: true } : {}),
+          })),
+        }
+      : {}),
     responsaveis: {
       // Só grupos (privada nunca entra na regra do responsável), com os valores crus do banco.
       grupos: j.conversas

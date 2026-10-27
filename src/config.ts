@@ -36,6 +36,8 @@ export interface Config {
   varreduraAutomatica: boolean;
   /** Limpeza diária de retenção (LGPD): apaga mensagens de conversa bloqueada há mais de 90 dias. */
   retencaoAtiva: boolean;
+  /** IA dos retornos prometidos (Claude Haiku). Ausente = desligada. */
+  retornos: { chave: string; modelo: string } | undefined;
   /** Classificador de urgência (Claude Haiku). Ausente = desligado, e toda mensagem vale médio. */
   classificador: { chave: string; modelo: string } | undefined;
 }
@@ -69,6 +71,7 @@ const esquema = z.object({
   CLASSIFICADOR_ATIVO: opcional(z.enum(['true', 'false'])),
   VARREDURA_AUTOMATICA: opcional(z.enum(['true', 'false'])),
   RETENCAO_ATIVA: opcional(z.enum(['true', 'false'])),
+  RETORNOS_ATIVO: opcional(z.enum(['true', 'false'])),
   CLASSIFICADOR_MODELO: opcional(z.string().regex(/^[a-z0-9.-]+$/)),
   ANTHROPIC_API_KEY: opcional(z.string().min(1)),
 });
@@ -92,6 +95,7 @@ const DESCRICAO: Record<string, string> = {
   CLASSIFICADOR_ATIVO: 'precisa ser true ou false',
   VARREDURA_AUTOMATICA: 'precisa ser true ou false',
   RETENCAO_ATIVA: 'precisa ser true ou false',
+  RETORNOS_ATIVO: 'precisa ser true ou false',
   CLASSIFICADOR_MODELO: 'inválido',
   ANTHROPIC_API_KEY: 'inválido',
 };
@@ -162,6 +166,9 @@ export function lerConfig(env: NodeJS.ProcessEnv, opcoes: { exigirBanco: boolean
   if (env.CLASSIFICADOR_ATIVO?.trim() === 'true' && !env.ANTHROPIC_API_KEY?.trim()) {
     problemas.push('ANTHROPIC_API_KEY: obrigatório quando CLASSIFICADOR_ATIVO=true');
   }
+  if (env.RETORNOS_ATIVO?.trim() === 'true' && !env.ANTHROPIC_API_KEY?.trim()) {
+    problemas.push('ANTHROPIC_API_KEY: obrigatório quando RETORNOS_ATIVO=true');
+  }
   const conversa = lerChave(env.RADAR_CHAVE_CONVERSA);
   const cifra = lerChave(env.RADAR_CHAVE_CIFRA);
   if (conversa && cifra && conversa.equals(cifra)) {
@@ -196,6 +203,10 @@ export function lerConfig(env: NodeJS.ProcessEnv, opcoes: { exigirBanco: boolean
     observadorNumero: e.OBSERVADOR_NUMERO ? chaveTelefone(e.OBSERVADOR_NUMERO) : undefined,
     varreduraAutomatica: e.VARREDURA_AUTOMATICA === 'true',
     retencaoAtiva: e.RETENCAO_ATIVA === 'true',
+    retornos:
+      e.RETORNOS_ATIVO === 'true' && e.ANTHROPIC_API_KEY
+        ? { chave: e.ANTHROPIC_API_KEY, modelo: e.CLASSIFICADOR_MODELO ?? 'claude-haiku-5-5' }
+        : undefined,
     classificador:
       e.CLASSIFICADOR_ATIVO === 'true' && e.ANTHROPIC_API_KEY
         ? { chave: e.ANTHROPIC_API_KEY, modelo: e.CLASSIFICADOR_MODELO ?? 'claude-haiku-5-5' }

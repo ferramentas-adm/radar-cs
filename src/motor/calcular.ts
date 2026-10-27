@@ -1,9 +1,9 @@
 // Motor de regras do Radar (função pura, sem I/O). Devolve a resposta de GET /api/radar no formato
 // de docs/api-contract.md. Mesma lógica do motor de demonstração do painel, com tempo de expediente.
 // Nesta fatia: "sem resposta" (cada mensagem no prazo do seu nível de urgência; sem classificação
-// vale médio) e "sem contato". "Registrar ação feita" (marcações) vale quando o banco tem a tabela
-// (recursos.marcacoes); promessas ficam vazias e saem como recurso ausente (recursos.promessas =
-// false), para o painel esconder o que ainda não existe em vez de mostrar zero.
+// vale médio), "sem contato" e "retorno vencido" (promessa aberta que passou do prazo vai direto ao
+// gestor; o time escrever no grupo depois dela a cumpre). "Registrar ação feita" (marcações) e
+// promessas valem quando o banco tem as tabelas (recursos.*); sem elas o painel esconde a parte.
 // Conversa privada nunca vira linha (alertas, pendentes, clientes, resumo): entra só nos números
 // por especialista (privadas sem resposta além do prazo de aviso; com atividade em 7 dias e no mês).
 // "Aguardando definição do especialista principal": pela regra do responsável (planejarResponsaveis),
@@ -22,6 +22,19 @@ export interface MarcacaoMotor {
   desfeita?: boolean;
 }
 
+/** Retorno prometido pelo time (IA). Só grupos. */
+export interface PromessaMotor {
+  id: string;
+  id_grupo: string;
+  /** Resumo da promessa (até 10 palavras). */
+  promessa: string;
+  prazo: number; // ms
+  /** Hora da mensagem em que o time prometeu. */
+  feita_em: number; // ms
+  /** Já gravada como cumprida no banco. */
+  cumprida?: boolean;
+}
+
 export type Urgencia = 'alto' | 'medio' | 'baixo';
 export interface Prazo {
   minutos_aviso: number;
@@ -30,6 +43,8 @@ export interface Prazo {
 
 const MIN = 60_000;
 const SETE_DIAS = 7 * 24 * 60 * MIN;
+const DIA = 24 * 60 * MIN;
+const SEIS_HORAS = 6 * 60 * MIN;
 export const MAX_DEFINICOES = 20;
 
 export interface GrupoMotor {
@@ -70,8 +85,10 @@ export interface EntradaMotor {
   observador: { status: 'conectado' | 'conectando' | 'desconectado'; desde: number | null };
   ultimaMensagemEm: number | null;
   usuario: { nome: string; pode_marcar: boolean; admin?: boolean };
-  /** O banco tem a tabela de marcações (migration aplicada). Sem isto o painel esconde o recurso. */
-  recursos?: { marcacoes?: boolean };
+  /** O banco tem as tabelas de marcações e de promessas. Sem isto o painel esconde o recurso. */
+  recursos?: { marcacoes?: boolean; promessas?: boolean };
+  /** Promessas abertas e as cumpridas nas últimas 24 h. */
+  promessas?: PromessaMotor[];
   /** Presença, time e varreduras (sem agora). Ausente = lista "aguardando definição" vazia. */
   responsaveis?: Omit<EntradaResponsaveis, 'agora'>;
 }
@@ -91,6 +108,8 @@ interface Motivo {
   desde: string;
   aviso_em: string | null;
   gestor_em: string;
+  /** Só em retorno_vencido: resumo da promessa. */
+  promessa?: string;
 }
 
 interface Alerta {
@@ -121,6 +140,14 @@ export function calcular(e: EntradaMotor) {
     lista.push(m);
     porGrupo.set(m.id_grupo, lista);
   }
+
+  const promessasDe = new Map<string, PromessaMotor[]>();
+  for (const p of e.promessas ?? []) {
+    const lista = promessasDe.get(p.id_grupo) ?? [];
+    lista.push(p);
+    promessasDe.set(p.id_grupo, lista);
+  }
+  const cumpridaP = (p: PromessaMotor, ultimaTime: number | null) => p.cumprida === true || (ultimaTime !== null && ultimaTime > p.feita_em);
 
   const alertas: Alerta[] = [];
   const resolvidos: {
@@ -187,6 +214,12 @@ export function calcular(e: EntradaMotor) {
       motivos.push({ tipo: 'sem_resposta', nivel: pior.nivel, desde: iso(pior.p.em), aviso_em: iso(pior.aviso), gestor_em: iso(pior.gestor) });
     }
     // Sem contato: dias úteis desde a última do time (ou desde a entrada do observador).
+    // Retorno vencido: promessa aberta, sem mensagem do time depois dela, que passou do prazo (o prazo
+    // é o combinado com o cliente, não tempo de expediente). Vai direto ao gestor.
+    for (const p of promessasDe.get(g.id_grupo) ?? []) {
+      if (cumpridaP(p, ultimaTime) || ag < p.prazo) continue;
+      motivos.push({ tipo: 'retorno_vencido', nivel: 'gestor', desde: iso(p.prazo), aviso_em: null, gestor_em: iso(p.prazo), promessa: p.promessa });
+    }
     const base = ultimaTime ?? g.observador_entrou_em;
     if (base !== null) {
       const a = somarDiasUteis(base, 1, e.calendario);
@@ -320,7 +353,22 @@ export function calcular(e: EntradaMotor) {
     if (!item) continue;
     if (a.motivos.some((m) => m.tipo === 'sem_contato' && m.nivel === 'gestor')) item.sem_contato++;
     if (a.motivos.some((m) => m.tipo === 'sem_resposta' && m.nivel === 'gestor')) item.sem_resposta++;
+    item.retornos_vencidos += a.motivos.filter((m) => m.tipo === 'retorno_vencido').length;
   }
+
+  // Retornos prometidos: só de grupos ativos. Cumpridos só das últimas 24 h.
+  const retornos: { id: string; id_grupo: string; cliente: string; especialista: string; promessa: string; prazo: string; situacao: 'vencido' | 'vence_hoje' | 'no_prazo' | 'cumprido' }[] = [];
+  for (const g of grupos) {
+    const { ultimaTime } = situacao(g.id_grupo);
+    for (const p of promessasDe.get(g.id_grupo) ?? []) {
+      const cumprida = cumpridaP(p, ultimaTime);
+      if (cumprida && !p.cumprida && ultimaTime !== null && ag - ultimaTime > DIA) continue;
+      const sit = cumprida ? 'cumprido' : ag >= p.prazo ? 'vencido' : p.prazo - ag <= SEIS_HORAS ? 'vence_hoje' : 'no_prazo';
+      retornos.push({ id: p.id, id_grupo: g.id_grupo, cliente: g.cliente, especialista: g.especialista, promessa: p.promessa, prazo: iso(p.prazo), situacao: sit });
+    }
+  }
+  const rk = { vencido: 0, vence_hoje: 1, no_prazo: 2, cumprido: 3 } as const;
+  retornos.sort((x, y) => rk[x.situacao] - rk[y.situacao] || ts(x.prazo) - ts(y.prazo));
   const por_especialista = [...porEsp.values()].sort((x, y) => x.especialista.localeCompare(y.especialista, 'pt-BR'));
   for (const item of por_especialista) {
     item.clientes.sort((x, y) => ord[x.estado] - ord[y.estado] || x.cliente.localeCompare(y.cliente, 'pt-BR'));
@@ -353,7 +401,7 @@ export function calcular(e: EntradaMotor) {
   return {
     gerado_em: iso(ag),
     // Ainda não implementados: o painel esconde as seções em vez de mostrar zero.
-    recursos: { marcacoes: e.recursos?.marcacoes === true, promessas: false },
+    recursos: { marcacoes: e.recursos?.marcacoes === true, promessas: e.recursos?.promessas === true },
     usuario: e.usuario,
     observador: {
       status: e.observador.status,
@@ -366,13 +414,13 @@ export function calcular(e: EntradaMotor) {
       em_alerta_gestor: alertas.filter((a) => a.nivel === 'gestor').length,
       sem_contato: { gestor: conta('sem_contato', 'gestor'), aviso: conta('sem_contato', 'aviso') },
       sem_resposta: { gestor: conta('sem_resposta', 'gestor'), aviso: conta('sem_resposta', 'aviso') },
-      retornos_vencidos: 0,
+      retornos_vencidos: alertas.reduce((n, a) => n + a.motivos.filter((m) => m.tipo === 'retorno_vencido').length, 0),
     },
     alertas,
     pendentes,
     resolvidos_por_fora: resolvidos,
     por_especialista,
-    retornos: [],
+    retornos,
     definicoes_pendentes,
   };
 }
